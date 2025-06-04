@@ -17,13 +17,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
-      - name: Install supabase CLI
-        run: npm install -g supabase
+      - name: Download supabase CLI binary
+        run: |
+          curl -L https://github.com/supabase/cli/releases/latest/download/supabase_linux_amd64.tar.gz -o supabase.tar.gz
+          tar -xzf supabase.tar.gz
+          chmod +x supabase
+          sudo mv supabase /usr/local/bin/supabase
 
       - name: Extract project ref
         run: |
