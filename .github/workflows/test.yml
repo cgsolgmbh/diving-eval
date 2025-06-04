@@ -1,0 +1,13 @@
+name: Test Upload Artifact
+
+on: workflow_dispatch
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Hello World" > test.txt
+      - uses: actions/upload-artifact@v2.3.1
+        with:
+          name: test-artifact
+          path: test.txt
