@@ -3,7 +3,7 @@ name: Supabase Full Backup
 on:
   schedule:
     - cron: '0 2 * * *'  # Täglich um 2:00 UTC
-  workflow_dispatch:  # Manuell auslösbar
+  workflow_dispatch:
 
 jobs:
   backup:
@@ -23,27 +23,24 @@ jobs:
           echo "SUPABASE_URL=${{ secrets.SUPABASE_PROJECT_URL }}" >> $GITHUB_ENV
           echo "SUPABASE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" >> $GITHUB_ENV
 
-      - name: Download pg_tunnel
+      - name: Download pg_tunnel binary (v1.156.0)
         run: |
-          curl -L https://github.com/supabase/cli/releases/latest/download/pg_tunnel-linux-amd64 -o pg_tunnel
+          curl -L -o pg_tunnel https://github.com/supabase/cli/releases/download/v1.156.0/pg_tunnel-linux-amd64
           chmod +x pg_tunnel
 
       - name: Start pg_tunnel
         run: |
           PROJECT_REF=$(echo "${SUPABASE_URL}" | sed -E 's|https://([^.]+)\.supabase\.co|\1|')
-          echo "Using project ref: $PROJECT_REF"
-
-          # Starte Tunnel im Hintergrund und speichere Logs
+          echo "Project ref: $PROJECT_REF"
+          
           ./pg_tunnel --project-ref=$PROJECT_REF --password=$SUPABASE_KEY > tunnel.log 2>&1 &
           echo $! > pg_tunnel.pid
 
-          echo "Warte auf Tunnel (5s)..."
           sleep 5
+          echo "--- pg_tunnel log ---"
+          cat tunnel.log || true
 
-          echo "Tunnel-Log-Ausgabe:"
-          cat tunnel.log
-
-      - name: Dump database schema and data
+      - name: Dump database
         run: |
           export PGPASSWORD="${SUPABASE_KEY}"
           pg_dump -h localhost -p 5432 -U postgres -d postgres --no-password --format=tar --file=backup_$(date +%Y%m%d_%H%M%S).tar
