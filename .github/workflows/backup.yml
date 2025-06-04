@@ -30,8 +30,18 @@ jobs:
 
       - name: Start pg_tunnel
         run: |
-          ./pg_tunnel --project-ref=$(basename $SUPABASE_URL) --password=$SUPABASE_KEY &
-          sleep 5  # Warten, bis Tunnel bereit ist
+          PROJECT_REF=$(echo "${SUPABASE_URL}" | sed -E 's|https://([^.]+)\.supabase\.co|\1|')
+          echo "Using project ref: $PROJECT_REF"
+
+          # Starte Tunnel im Hintergrund und speichere Logs
+          ./pg_tunnel --project-ref=$PROJECT_REF --password=$SUPABASE_KEY > tunnel.log 2>&1 &
+          echo $! > pg_tunnel.pid
+
+          echo "Warte auf Tunnel (5s)..."
+          sleep 5
+
+          echo "Tunnel-Log-Ausgabe:"
+          cat tunnel.log
 
       - name: Dump database schema and data
         run: |
