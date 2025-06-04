@@ -26,8 +26,8 @@ jobs:
         run: |
           curl -L -o pg_tunnel https://github.com/supabase/cli/releases/download/v1.156.0/pg_tunnel-linux-amd64
           chmod +x pg_tunnel
-          file pg_tunnel  # Sanity check: should say "ELF 64-bit..."
-
+          file pg_tunnel
+          head -n 5 pg_tunnel
       - name: Start pg_tunnel
         run: |
           ./pg_tunnel \
