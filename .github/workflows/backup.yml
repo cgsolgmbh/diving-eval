@@ -47,7 +47,7 @@ jobs:
           pg_dump -h localhost -p 6543 -U postgres -d postgres --format=tar --file=backup_$(date +%Y%m%d_%H%M%S).tar
 
       - name: Upload backup artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v2
         with:
           name: supabase-backup
           path: backup_*.tar
