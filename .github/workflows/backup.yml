@@ -16,22 +16,27 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y postgresql-client curl
 
-      - name: Setup pg_dump environment variables
+      - name: Set environment variables
         run: |
           echo "SUPABASE_URL=${{ secrets.SUPABASE_PROJECT_URL }}" >> $GITHUB_ENV
           echo "SUPABASE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" >> $GITHUB_ENV
 
+      - name: Download pg_tunnel
+        run: |
+          curl -L https://github.com/supabase/cli/releases/latest/download/pg_tunnel-linux-amd64 -o pg_tunnel
+          chmod +x pg_tunnel
+
+      - name: Start pg_tunnel
+        run: |
+          ./pg_tunnel --project-ref=$(basename $SUPABASE_URL) --password=$SUPABASE_KEY &
+          sleep 5  # Warten, bis Tunnel bereit ist
+
       - name: Dump database schema and data
         run: |
-          PGHOST="db.$(echo "$SUPABASE_URL" | sed 's|^https://||' | sed 's|/$||')"
-          PGDATABASE="postgres"
-          PGUSER="postgres"
-          PGPASSWORD="$SUPABASE_KEY"
-          export PGPASSWORD
-
-          pg_dump -h $PGHOST -U $PGUSER -d $PGDATABASE --no-password --format=tar --file=backup_$(date +%Y%m%d_%H%M%S).tar
+          export PGPASSWORD="${SUPABASE_KEY}"
+          pg_dump -h localhost -p 5432 -U postgres -d postgres --no-password --format=tar --file=backup_$(date +%Y%m%d_%H%M%S).tar
 
       - name: Commit and push backup
         run: |
