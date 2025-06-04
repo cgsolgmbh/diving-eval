@@ -1,0 +1,42 @@
+name: Supabase Full Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Täglich um 2:00 UTC
+  workflow_dispatch:  # Manuell auslösbar
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Setup pg_dump environment variables
+        run: |
+          echo "SUPABASE_URL=${{ secrets.SUPABASE_PROJECT_URL }}" >> $GITHUB_ENV
+          echo "SUPABASE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" >> $GITHUB_ENV
+
+      - name: Dump database schema and data
+        run: |
+          PGHOST=$(echo "$SUPABASE_URL" | sed 's/^https:\/\///' | sed 's/\.supabase\.co$//')
+          PGDATABASE="postgres"
+          PGUSER="postgres"
+          PGPASSWORD="$SUPABASE_KEY"
+          export PGPASSWORD
+
+          pg_dump -h $PGHOST -U $PGUSER -d $PGDATABASE --no-password --format=tar --file=backup_$(date +%Y%m%d_%H%M%S).tar
+
+      - name: Commit and push backup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backup_*.tar
+          git commit -m "Automated DB backup $(date)"
+          git push
