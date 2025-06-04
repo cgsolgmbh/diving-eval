@@ -1,57 +1,54 @@
-name: Supabase Full Backup
+name: Supabase Backup
 
 on:
-  schedule:
-    - cron: '0 2 * * *'  # Täglich um 2:00 UTC
   workflow_dispatch:
 
 jobs:
   backup:
     runs-on: ubuntu-latest
 
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Extract project ref from SUPABASE_URL
+        id: extract
         run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client curl
+          PROJECT_REF=$(echo "${SUPABASE_URL}" | sed -E 's|https://([^.]+)\.supabase\.co|\1|')
+          echo "PROJECT_REF=$PROJECT_REF" >> $GITHUB_ENV
+          echo "Project ref: $PROJECT_REF"
 
-      - name: Set environment variables
-        run: |
-          echo "SUPABASE_URL=${{ secrets.SUPABASE_PROJECT_URL }}" >> $GITHUB_ENV
-          echo "SUPABASE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" >> $GITHUB_ENV
-
-      - name: Download pg_tunnel binary (v1.156.0)
+      - name: Download pg_tunnel binary
         run: |
           curl -L -o pg_tunnel https://github.com/supabase/cli/releases/download/v1.156.0/pg_tunnel-linux-amd64
           chmod +x pg_tunnel
-          
-          file pg_tunnel
-          head -n 5 pg_tunnel
-        
+          file pg_tunnel  # Sanity check: should say "ELF 64-bit..."
+
       - name: Start pg_tunnel
         run: |
-          PROJECT_REF=$(echo "${SUPABASE_URL}" | sed -E 's|https://([^.]+)\.supabase\.co|\1|')
-          echo "Project ref: $PROJECT_REF"
-          
-          ./pg_tunnel --project-ref=$PROJECT_REF --password=$SUPABASE_KEY > tunnel.log 2>&1 &
+          ./pg_tunnel \
+            --project-ref=$PROJECT_REF \
+            --db-url "postgres://postgres:${SUPABASE_KEY}@db.${PROJECT_REF}.supabase.co:5432/postgres" \
+            > tunnel.log 2>&1 &
           echo $! > pg_tunnel.pid
 
           sleep 5
           echo "--- pg_tunnel log ---"
           cat tunnel.log || true
 
-      - name: Dump database
+      - name: Run pg_dump
         run: |
           export PGPASSWORD="${SUPABASE_KEY}"
-          pg_dump -h localhost -p 5432 -U postgres -d postgres --no-password --format=tar --file=backup_$(date +%Y%m%d_%H%M%S).tar
+          pg_dump -h localhost -p 5432 -U postgres -d postgres \
+            --no-password --format=tar \
+            --file=backup_$(date +%Y%m%d_%H%M%S).tar
 
-      - name: Commit and push backup
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add backup_*.tar
-          git commit -m "Automated DB backup $(date)"
-          git push
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup
+          path: backup_*.tar
