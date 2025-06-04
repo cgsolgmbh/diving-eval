@@ -25,7 +25,7 @@ jobs:
 
       - name: Dump database schema and data
         run: |
-          PGHOST=$(echo "$SUPABASE_URL" | sed 's/^https:\/\///' | sed 's/\.supabase\.co$//')
+          PGHOST="db.$(echo "$SUPABASE_URL" | sed 's|^https://||' | sed 's|/$||')"
           PGDATABASE="postgres"
           PGUSER="postgres"
           PGPASSWORD="$SUPABASE_KEY"
