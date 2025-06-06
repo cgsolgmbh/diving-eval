@@ -2792,7 +2792,7 @@ def main():
     st.session_state["page"] = selected
 
     if selected == "Startseite":
-        
+        startseite()        
     elif selected == "Athleten eingeben":
         st.header("📝 Neuen Athleten hinzufügen")
 
