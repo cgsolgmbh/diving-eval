@@ -12,6 +12,35 @@ import datetime
 url = "https://aeragsmcfdummwjwhmcq.supabase.co"
 key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlcmFnc21jZmR1bW13andobWNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY5NjU5MTIsImV4cCI6MjA2MjU0MTkxMn0.9fEEtF1UgQb1fiOo4mb69mvV7hAJeu4eqjGA9Be-aUc"
 supabase: Client = create_client(url, key)
+# --- LOGIN-MODUL ---
+if "user" not in st.session_state:
+    st.session_state["user"] = None
+
+def login_view():
+    st.title("🔐 Login erforderlich")
+    email = st.text_input("E-Mail")
+    password = st.text_input("Passwort", type="password")
+    if st.button("Einloggen"):
+        try:
+            user = supabase.auth.sign_in_with_password({"email": email, "password": password})
+
+            # ✅ Whitelist: Nur bestimmte Nutzer dürfen rein
+            erlaubte_emails = ["christian.greuter@cgsol.ch", "christian.greuter@swiss-aquatics.ch", "christian.finger@swiss-aquatics.ch"]
+            if user.user.email not in erlaubte_emails:
+                st.error("⛔ Zugriff verweigert: Du bist nicht berechtigt.")
+                return
+
+            st.session_state["user"] = user
+            st.success("Login erfolgreich.")
+            st.experimental_rerun()
+        except Exception as e:
+            st.error(f"Login fehlgeschlagen: {e}")
+
+def logout_button():
+    if st.button("🚪 Logout"):
+        st.session_state["user"] = None
+        st.experimental_rerun()
+
 
 # --- LOGIN-MODUL ---
 if "user" not in st.session_state:
@@ -36,13 +65,8 @@ def logout_button():
         st.experimental_rerun()
 
 # --- HAUPTSTEUERUNG ---
-if st.session_state["user"]:
-    logout_button()
-    startseite()  # Hier kannst du ggf. auf andere Seitenlogik erweitern
-else:
-    login_view()
 
-def startseite():
+def :
     st.title("🏊‍♂️ Diving Analysis")
     st.markdown("Willkommen beim Auswertungstool von Swiss-Aquatics Diving")
 
@@ -2735,7 +2759,7 @@ def referenztabellen_anzeigen():
 
 
 # Hauptmenü
-def main():
+def :
     if "page" not in st.session_state:
         st.session_state["page"] = "Startseite"
 
@@ -2768,7 +2792,7 @@ def main():
     st.session_state["page"] = selected
 
     if selected == "Startseite":
-        startseite()
+        
     elif selected == "Athleten eingeben":
         st.header("📝 Neuen Athleten hinzufügen")
 
@@ -2856,9 +2880,18 @@ def main():
     elif selected == "Referenz- und Bewertungstabellen":
         referenztabellen_anzeigen()
 
+        st.session_state["user"] = None
+
+    
+
+
+# --- APP START ---
 if __name__ == "__main__":
+    if "user" not in st.session_state:
+        st.session_state["user"] = None
+
     if st.session_state["user"]:
         logout_button()
-        main()  # oder startseite(), was auch immer deine Startfunktion ist
+        startseite()
     else:
         login_view()
