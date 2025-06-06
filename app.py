@@ -2857,11 +2857,8 @@ def main():
         referenztabellen_anzeigen()
 
 if __name__ == "__main__":
-    if "user" not in st.session_state:
-        st.session_state["user"] = None
-
     if st.session_state["user"]:
         logout_button()
-        main()  # oder startseite() – was bei dir den Einstieg darstellt
+        main()  # oder startseite(), was auch immer deine Startfunktion ist
     else:
         login_view()
