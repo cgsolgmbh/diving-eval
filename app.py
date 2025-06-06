@@ -33,6 +33,7 @@ def login_view():
             st.write("Debug: Angemeldeter Benutzer:", user.user.email)  # ← zum Testen
 
             erlaubte_emails = [
+                "christian.greuter@outlook.com",
                 "christian.greuter@cgsol.ch",
                 "christian.greuter@swiss-aquatics.ch",
                 "christian.finger@swiss-aquatics.ch"
