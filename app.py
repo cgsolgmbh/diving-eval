@@ -2829,3 +2829,32 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# --- LOGIN-MODUL ---
+if "user" not in st.session_state:
+    st.session_state["user"] = None
+
+def login_view():
+    st.title("🔐 Login erforderlich")
+    email = st.text_input("E-Mail")
+    password = st.text_input("Passwort", type="password")
+    if st.button("Einloggen"):
+        try:
+            user = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            st.session_state["user"] = user
+            st.success("Login erfolgreich.")
+            st.experimental_rerun()
+        except Exception as e:
+            st.error(f"Login fehlgeschlagen: {e}")
+
+def logout_button():
+    if st.button("🚪 Logout"):
+        st.session_state["user"] = None
+        st.experimental_rerun()
+
+# --- HAUPTSTEUERUNG ---
+if st.session_state["user"]:
+    logout_button()
+    startseite()  # Hier kannst du ggf. auf andere Seitenlogik erweitern
+else:
+    login_view()
