@@ -9,9 +9,10 @@ import numpy as np
 import datetime
 
 # 🔑 Supabase-Konfiguration
-url = "https://aeragsmcfdummwjwhmcq.supabase.co"
-key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlcmFnc21jZmR1bW13andobWNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY5NjU5MTIsImV4cCI6MjA2MjU0MTkxMn0.9fEEtF1UgQb1fiOo4mb69mvV7hAJeu4eqjGA9Be-aUc"
-supabase: Client = create_client(url, key)
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 # --- LOGIN-MODUL ---
 if "user" not in st.session_state:
     st.session_state["user"] = None
