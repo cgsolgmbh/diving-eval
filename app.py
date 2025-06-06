@@ -25,7 +25,7 @@ def login_view():
             user = supabase.auth.sign_in_with_password({"email": email, "password": password})
 
             # ✅ Whitelist: Nur bestimmte Nutzer dürfen rein
-            erlaubte_emails = ["christian.greuter@swiss-aquatics.ch", "christian.finger@swiss-aquatics.ch", "christian.greuter@outlook.com"]
+            erlaubte_emails = ["admin@swiss-aquatics.ch", "deinname@example.com"]
             if user.user.email not in erlaubte_emails:
                 st.error("⛔ Zugriff verweigert: Du bist nicht berechtigt.")
                 return
@@ -2759,7 +2759,7 @@ def referenztabellen_anzeigen():
 
 
 # Hauptmenü
-def :
+def main():
     if "page" not in st.session_state:
         st.session_state["page"] = "Startseite"
 
