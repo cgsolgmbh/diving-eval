@@ -25,7 +25,7 @@ def login_view():
             user = supabase.auth.sign_in_with_password({"email": email, "password": password})
 
             # ✅ Whitelist: Nur bestimmte Nutzer dürfen rein
-            erlaubte_emails = ["christian.greuter@outlook.com", "christian.greuter@swiss-aquatics.ch", "christian.finger@swiss-aquatics.ch"]
+            erlaubte_emails = ["admin@swiss-aquatics.ch", "deinname@example.com"]
             if user.user.email not in erlaubte_emails:
                 st.error("⛔ Zugriff verweigert: Du bist nicht berechtigt.")
                 return
