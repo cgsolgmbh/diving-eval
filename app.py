@@ -66,7 +66,7 @@ def logout_button():
 
 # --- HAUPTSTEUERUNG ---
 
-def Startseite():
+def startseite():
     st.title("🏊‍♂️ Diving Analysis")
     st.markdown("Willkommen beim Auswertungstool von Swiss-Aquatics Diving")
 
