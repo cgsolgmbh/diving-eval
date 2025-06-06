@@ -2896,8 +2896,6 @@ def main():
 
         st.session_state["user"] = None
 
-    
-
 
 # --- APP START ---
 if __name__ == "__main__":
