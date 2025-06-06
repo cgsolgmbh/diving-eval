@@ -20,12 +20,23 @@ def login_view():
     st.title("🔐 Login erforderlich")
     email = st.text_input("E-Mail")
     password = st.text_input("Passwort", type="password")
+
     if st.button("Einloggen"):
         try:
             user = supabase.auth.sign_in_with_password({"email": email, "password": password})
 
-            # ✅ Whitelist: Nur bestimmte Nutzer dürfen rein
-            erlaubte_emails = ["christian.greuter@cgsol.ch", "christian.greuter@swiss-aquatics.ch", "christian.finger@swiss-aquatics.ch"]
+            if not user or not user.user:
+                st.error("Login fehlgeschlagen – Benutzer nicht gefunden.")
+                return
+
+            st.write("Debug: Angemeldeter Benutzer:", user.user.email)  # ← zum Testen
+
+            erlaubte_emails = [
+                "christian.greuter@cgsol.ch",
+                "christian.greuter@swiss-aquatics.ch",
+                "christian.finger@swiss-aquatics.ch"
+            ]
+
             if user.user.email not in erlaubte_emails:
                 st.error("⛔ Zugriff verweigert: Du bist nicht berechtigt.")
                 return
@@ -33,8 +44,10 @@ def login_view():
             st.session_state["user"] = user
             st.success("Login erfolgreich.")
             st.experimental_rerun()
+
         except Exception as e:
             st.error(f"Login fehlgeschlagen: {e}")
+
 
 def logout_button():
     if st.button("🚪 Logout"):
