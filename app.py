@@ -13,6 +13,35 @@ url = "https://aeragsmcfdummwjwhmcq.supabase.co"
 key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlcmFnc21jZmR1bW13andobWNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY5NjU5MTIsImV4cCI6MjA2MjU0MTkxMn0.9fEEtF1UgQb1fiOo4mb69mvV7hAJeu4eqjGA9Be-aUc"
 supabase: Client = create_client(url, key)
 
+# --- LOGIN-MODUL ---
+if "user" not in st.session_state:
+    st.session_state["user"] = None
+
+def login_view():
+    st.title("🔐 Login erforderlich")
+    email = st.text_input("E-Mail")
+    password = st.text_input("Passwort", type="password")
+    if st.button("Einloggen"):
+        try:
+            user = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            st.session_state["user"] = user
+            st.success("Login erfolgreich.")
+            st.experimental_rerun()
+        except Exception as e:
+            st.error(f"Login fehlgeschlagen: {e}")
+
+def logout_button():
+    if st.button("🚪 Logout"):
+        st.session_state["user"] = None
+        st.experimental_rerun()
+
+# --- HAUPTSTEUERUNG ---
+if st.session_state["user"]:
+    logout_button()
+    startseite()  # Hier kannst du ggf. auf andere Seitenlogik erweitern
+else:
+    login_view()
+
 def startseite():
     st.title("🏊‍♂️ Diving Analysis")
     st.markdown("Willkommen beim Auswertungstool von Swiss-Aquatics Diving")
@@ -2836,33 +2865,3 @@ if __name__ == "__main__":
         main()  # oder startseite() – was bei dir den Einstieg darstellt
     else:
         login_view()
-
-
-# --- LOGIN-MODUL ---
-if "user" not in st.session_state:
-    st.session_state["user"] = None
-
-def login_view():
-    st.title("🔐 Login erforderlich")
-    email = st.text_input("E-Mail")
-    password = st.text_input("Passwort", type="password")
-    if st.button("Einloggen"):
-        try:
-            user = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            st.session_state["user"] = user
-            st.success("Login erfolgreich.")
-            st.experimental_rerun()
-        except Exception as e:
-            st.error(f"Login fehlgeschlagen: {e}")
-
-def logout_button():
-    if st.button("🚪 Logout"):
-        st.session_state["user"] = None
-        st.experimental_rerun()
-
-# --- HAUPTSTEUERUNG ---
-if st.session_state["user"]:
-    logout_button()
-    startseite()  # Hier kannst du ggf. auf andere Seitenlogik erweitern
-else:
-    login_view()
