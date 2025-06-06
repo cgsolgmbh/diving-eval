@@ -25,7 +25,7 @@ def login_view():
             user = supabase.auth.sign_in_with_password({"email": email, "password": password})
 
             # ✅ Whitelist: Nur bestimmte Nutzer dürfen rein
-            erlaubte_emails = ["admin@swiss-aquatics.ch", "deinname@example.com"]
+            erlaubte_emails = ["christian.greuter@swiss-aquatics.ch", "christian.finger@swiss-aquatics.ch", "christian.greuter@outlook.com"]
             if user.user.email not in erlaubte_emails:
                 st.error("⛔ Zugriff verweigert: Du bist nicht berechtigt.")
                 return
@@ -66,7 +66,7 @@ def logout_button():
 
 # --- HAUPTSTEUERUNG ---
 
-def Startseite()
+def Startseite():
     st.title("🏊‍♂️ Diving Analysis")
     st.markdown("Willkommen beim Auswertungstool von Swiss-Aquatics Diving")
 
