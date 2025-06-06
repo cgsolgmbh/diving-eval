@@ -25,10 +25,9 @@ def login_view():
     if st.button("Einloggen"):
         try:
             user = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            st.write(user)
-            if not user or not user.user:
-                st.error("Login fehlgeschlagen – Benutzer nicht gefunden.")
-                return
+            st.write(user)  # Debug
+        except Exception as e:
+            st.error(f"❌ Login fehlgeschlagen: {e}")
 
             st.write("Debug: Angemeldeter Benutzer:", user.user.email)  # ← zum Testen
 
