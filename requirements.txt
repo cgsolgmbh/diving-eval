@@ -1,2 +1,7 @@
 streamlit
 supabase
+matplotlib
+seaborn
+pandas
+numpy
+openpyxl
