@@ -33,10 +33,12 @@ if "access_token" not in st.session_state:
     if "access_token" in params:
         st.session_state["access_token"] = params["access_token"]
         st.session_state["refresh_token"] = params.get("refresh_token")
-        # Optional: User holen und Session setzen
+        # User holen und Session setzen
         user = supabase.auth.get_user(st.session_state["access_token"])
         st.session_state["user"] = user
-        st.rerun()
+        # Kein st.rerun() mehr hier!
+        # Seite wird ohnehin durch das JavaScript-Snippet neu geladen
+        # und der Token ist dann aus der URL verschwunden
 
 # --- LOGIN-MODUL ---
 if "user" not in st.session_state:
