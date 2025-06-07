@@ -6,7 +6,7 @@ import importlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-
+st.write("Aktuelle Query-Parameter:", st.query_params)
 # --- JavaScript-Snippet für OAuth-Token-Handling ---
 st.components.v1.html("""
 <script>
