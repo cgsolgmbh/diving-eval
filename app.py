@@ -17,6 +17,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
 });
 </script>
 """)
+st.write("DEBUG: Session-State", dict(st.session_state))
 import datetime
 import pandas as pd
 from supabase import create_client, Client
