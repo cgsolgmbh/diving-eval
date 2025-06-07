@@ -7,9 +7,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
-st.write("Query-Params:", st.query_params)
-st.write("Session-State:", dict(st.session_state))
-
 # --- JavaScript-Snippet für OAuth-Token-Handling ---
 st.components.v1.html("""
 <script>
@@ -33,15 +30,16 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # Token aus URL-Fragment holen (nur beim allerersten Aufruf nach OAuth)
 if "access_token" not in st.session_state:
     params = st.query_params
+    st.write("DEBUG: Query-Params:", params)
     if "access_token" in params:
         st.session_state["access_token"] = params["access_token"]
         st.session_state["refresh_token"] = params.get("refresh_token")
-        # User holen und Session setzen
-        user = supabase.auth.get_user(st.session_state["access_token"])
-        st.session_state["user"] = user
-        # Kein st.rerun() mehr hier!
-        # Seite wird ohnehin durch das JavaScript-Snippet neu geladen
-        # und der Token ist dann aus der URL verschwunden
+        try:
+            user = supabase.auth.get_user(st.session_state["access_token"])
+            st.session_state["user"] = user
+            st.write("DEBUG: User gesetzt!", user)
+        except Exception as e:
+            st.error(f"Fehler beim User-Token: {e}")
 
 # --- LOGIN-MODUL ---
 if "user" not in st.session_state:
