@@ -84,18 +84,30 @@ def login_view():
     st.markdown("Oder mit Microsoft anmelden:")
 
     # Azure OAuth-Login
-    redirect_url = st.secrets["OAUTH_REDIRECT_URL"]  # z.B. https://deine-app.streamlit.app
-    # Supabase-URL für Microsoft-Login
+    redirect_url = st.secrets["OAUTH_REDIRECT_URL"]
     oauth_url = (
         f"{SUPABASE_URL}/auth/v1/authorize"
         f"?provider=azure"
         f"&redirect_to={redirect_url}"
     )
-    st.write("DEBUG: OAuth-URL", oauth_url)
-    st.markdown(f'[🔵 Mit Microsoft anmelden]({oauth_url})', unsafe_allow_html=True)
-    
-    # Nach erfolgreichem Login wird der User zu redirect_url zurückgeleitet, mit einem Access-Token im URL-Fragment.
-    # Diesen musst du auslesen und mit supabase.auth.get_user() validieren.
+    st.markdown(
+        f'''
+        <a href="{oauth_url}" target="_blank" style="text-decoration:none;">
+            <button style="
+                background-color:#2d7ff9;
+                color:white;
+                padding:0.5em 1.5em;
+                border:none;
+                border-radius:4px;
+                font-size:1.1em;
+                cursor:pointer;
+            ">
+                🔵 Mit Microsoft anmelden
+            </button>
+        </a>
+        ''',
+        unsafe_allow_html=True
+    )
 
 
 def logout_button():
