@@ -18,6 +18,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
 </script>
 """)
 import datetime
+st.write("URL:", st.experimental_get_url())
+st.write("Query-Params:", st.query_params)
+st.write("Session-State:", dict(st.session_state))
 import pandas as pd
 from supabase import create_client, Client
 import importlib
