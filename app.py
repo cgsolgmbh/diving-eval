@@ -2873,7 +2873,6 @@ def main():
 
         st.session_state["user"] = None
 
-
 # --- APP START ---
 if __name__ == "__main__":
     if "user" not in st.session_state:
@@ -2881,6 +2880,6 @@ if __name__ == "__main__":
 
     if st.session_state["user"]:
         logout_button()
-        startseite()
+        main()  # <-- Navigation über das Hauptmenü
     else:
         login_view()
