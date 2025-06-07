@@ -38,7 +38,7 @@ if "access_token" not in st.session_state:
         # Kein st.rerun() mehr hier!
         # Seite wird ohnehin durch das JavaScript-Snippet neu geladen
         # und der Token ist dann aus der URL verschwunden
-st.write("Aktuelle Query-Parameter:", st.query_params)
+
 # --- LOGIN-MODUL ---
 if "user" not in st.session_state:
     st.session_state["user"] = None
@@ -88,7 +88,7 @@ def login_view():
         f"&redirect_to={redirect_url}"
     )
     st.markdown(f'<a href="{oauth_url}" target="_self"><button>Mit Microsoft anmelden</button></a>', unsafe_allow_html=True)
-
+    st.write("Aktuelle Query-Parameter:", st.query_params)
     # Nach erfolgreichem Login wird der User zu redirect_url zurückgeleitet, mit einem Access-Token im URL-Fragment.
     # Diesen musst du auslesen und mit supabase.auth.get_user() validieren.
 
