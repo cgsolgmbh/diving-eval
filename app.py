@@ -44,7 +44,7 @@ def login_view():
 
             # 🔑 Login erfolgreich, Session speichern
             st.session_state["user"] = user
-            st.experimental_rerun()
+            st.rerun()
 
         except Exception as e:
             st.error(f"Login fehlgeschlagen: {e}")
@@ -54,7 +54,7 @@ def login_view():
 def logout_button():
     if st.button("🚪 Logout"):
         st.session_state["user"] = None
-        st.experimental_rerun()
+        st.rerun()
 
 
 # --- LOGIN-MODUL ---
@@ -70,14 +70,14 @@ def login_view():
             user = supabase.auth.sign_in_with_password({"email": email, "password": password})
             st.session_state["user"] = user
             st.success("Login erfolgreich.")
-            st.experimental_rerun()
+            st.rerun()
         except Exception as e:
             st.error(f"Login fehlgeschlagen: {e}")
 
 def logout_button():
     if st.button("🚪 Logout"):
         st.session_state["user"] = None
-        st.experimental_rerun()
+        st.rerun()
 
 # --- HAUPTSTEUERUNG ---
 
