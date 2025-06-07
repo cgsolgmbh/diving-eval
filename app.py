@@ -36,8 +36,6 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # Token aus URL-Fragment holen (nur beim allerersten Aufruf nach OAuth)
 if "access_token" not in st.session_state:
     params = st.query_params
-    if "access_token" not in st.session_state:
-    params = st.query_params
     st.write("DEBUG: Query-Params im Token-Block", params)
     if "access_token" in params:
         st.session_state["access_token"] = params["access_token"]
