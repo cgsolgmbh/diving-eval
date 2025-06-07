@@ -2,7 +2,6 @@ import datetime
 import pandas as pd
 from supabase import create_client, Client
 import streamlit as st
-st.write("Streamlit Version:", st.__version__)
 import importlib
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -15,23 +14,25 @@ SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- LOGIN-MODUL ---
-if "user" not in st.session_state:
-    st.session_state["user"] = None
+if "user" not in st.session_state or st.session_state["user"] is None:
+    login_view()
+else:
+    logout_button()
+    startseite()
 
 def login_view():
     st.title("🔐 Login erforderlich")
     email = st.text_input("E-Mail")
     password = st.text_input("Passwort", type="password")
 
-    if st.button("Einloggen"):
+    if st.button("Einloggen") and email and password:
         try:
-            user = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            st.write(user)
-            if not user or not user.user:
+            auth_result = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            user = auth_result.user
+
+            if not user:
                 st.error("Login fehlgeschlagen – Benutzer nicht gefunden.")
                 return
-
-            st.write("Debug: Angemeldeter Benutzer:", user.user.email)  # ← zum Testen
 
             erlaubte_emails = [
                 "christian.greuter@outlook.com",
@@ -40,16 +41,17 @@ def login_view():
                 "christian.finger@swiss-aquatics.ch"
             ]
 
-            if user.user.email not in erlaubte_emails:
+            if user.email not in erlaubte_emails:
                 st.error("⛔ Zugriff verweigert: Du bist nicht berechtigt.")
                 return
 
+            # 🔑 Login erfolgreich, Session speichern
             st.session_state["user"] = user
-            st.success("Login erfolgreich.")
             st.experimental_rerun()
 
         except Exception as e:
             st.error(f"Login fehlgeschlagen: {e}")
+
 
 
 def logout_button():
