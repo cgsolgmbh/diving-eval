@@ -6,7 +6,6 @@ import importlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-import datetime
 
 # --- JavaScript-Snippet für OAuth-Token-Handling ---
 st.components.v1.html("""
@@ -23,6 +22,11 @@ if (window.location.hash) {
 </script>
 """)
 
+# 🔑 Supabase-Konfiguration
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 # Token aus URL-Fragment holen (nur beim allerersten Aufruf nach OAuth)
 if "access_token" not in st.session_state:
     params = st.query_params
@@ -33,11 +37,6 @@ if "access_token" not in st.session_state:
         user = supabase.auth.get_user(st.session_state["access_token"])
         st.session_state["user"] = user
         st.rerun()
-
-# 🔑 Supabase-Konfiguration
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- LOGIN-MODUL ---
 if "user" not in st.session_state:
