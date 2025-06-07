@@ -18,7 +18,7 @@ if "user" not in st.session_state or st.session_state["user"] is None:
     login_view()
 else:
     logout_button()
-    startseite()
+    Startseite()
 
 def login_view():
     st.title("🔐 Login erforderlich")
