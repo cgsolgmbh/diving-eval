@@ -25,6 +25,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
+st.write("DEBUG: Session-State", dict(st.session_state))
+st.write("DEBUG: Query-Params", st.query_params)
+
 # 🔑 Supabase-Konfiguration
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -33,15 +36,15 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # Token aus URL-Fragment holen (nur beim allerersten Aufruf nach OAuth)
 if "access_token" not in st.session_state:
     params = st.query_params
+    if "access_token" not in st.session_state:
+    params = st.query_params
+    st.write("DEBUG: Query-Params im Token-Block", params)
     if "access_token" in params:
         st.session_state["access_token"] = params["access_token"]
         st.session_state["refresh_token"] = params.get("refresh_token")
-        # User holen und Session setzen
         user = supabase.auth.get_user(st.session_state["access_token"])
         st.session_state["user"] = user
-        # Kein st.rerun() mehr hier!
-        # Seite wird ohnehin durch das JavaScript-Snippet neu geladen
-        # und der Token ist dann aus der URL verschwunden
+        st.write("DEBUG: User nach OAuth", user)
 
 # --- LOGIN-MODUL ---
 if "user" not in st.session_state:
