@@ -91,6 +91,7 @@ def login_view():
         f"?provider=azure"
         f"&redirect_to={redirect_url}"
     )
+    st.write("DEBUG: OAuth-URL", oauth_url)
     st.write(f"👉 [Mit Microsoft anmelden]({oauth_url})")
     # Nach erfolgreichem Login wird der User zu redirect_url zurückgeleitet, mit einem Access-Token im URL-Fragment.
     # Diesen musst du auslesen und mit supabase.auth.get_user() validieren.
