@@ -8,9 +8,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import datetime
-import os
-st.write("Streamlit Version:", streamlit.__version__)
-st.write("Streamlit Modul Pfad:", streamlit.__file__)
 
 # 🔑 Supabase-Konfiguration
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
