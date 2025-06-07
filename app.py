@@ -14,11 +14,8 @@ SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- LOGIN-MODUL ---
-if "user" not in st.session_state or st.session_state["user"] is None:
-    login_view()
-else:
-    logout_button()
-    Startseite()
+if "user" not in st.session_state:
+    st.session_state["user"] = None
 
 def login_view():
     st.title("🔐 Login erforderlich")
