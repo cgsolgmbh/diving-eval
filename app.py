@@ -1,26 +1,29 @@
+import streamlit as st
+# --- JavaScript-Snippet für OAuth-Token-Handling ---
+st.components.v1.html("""
+<script>
+window.addEventListener('DOMContentLoaded', (event) => {
+    if (window.location.hash) {
+        const params = new URLSearchParams(window.location.hash.substr(1));
+        if (params.get('access_token')) {
+            const url = new URL(window.location);
+            url.searchParams.set('access_token', params.get('access_token'));
+            url.searchParams.set('refresh_token', params.get('refresh_token'));
+            setTimeout(function() {
+                window.location.replace(url.toString().split('#')[0]);
+            }, 100); // 100ms Verzögerung
+        }
+    }
+});
+</script>
+""")
 import datetime
 import pandas as pd
 from supabase import create_client, Client
-import streamlit as st
 import importlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-
-# --- JavaScript-Snippet für OAuth-Token-Handling ---
-st.components.v1.html("""
-<script>
-if (window.location.hash) {
-    const params = new URLSearchParams(window.location.hash.substr(1));
-    if (params.get('access_token')) {
-        const url = new URL(window.location);
-        url.searchParams.set('access_token', params.get('access_token'));
-        url.searchParams.set('refresh_token', params.get('refresh_token'));
-        window.location.replace(url.toString().split('#')[0]);
-    }
-}
-</script>
-""")
 
 # 🔑 Supabase-Konfiguration
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
@@ -30,16 +33,15 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # Token aus URL-Fragment holen (nur beim allerersten Aufruf nach OAuth)
 if "access_token" not in st.session_state:
     params = st.query_params
-    st.write("DEBUG: Query-Params:", params)
     if "access_token" in params:
         st.session_state["access_token"] = params["access_token"]
         st.session_state["refresh_token"] = params.get("refresh_token")
-        try:
-            user = supabase.auth.get_user(st.session_state["access_token"])
-            st.session_state["user"] = user
-            st.write("DEBUG: User gesetzt!", user)
-        except Exception as e:
-            st.error(f"Fehler beim User-Token: {e}")
+        # User holen und Session setzen
+        user = supabase.auth.get_user(st.session_state["access_token"])
+        st.session_state["user"] = user
+        # Kein st.rerun() mehr hier!
+        # Seite wird ohnehin durch das JavaScript-Snippet neu geladen
+        # und der Token ist dann aus der URL verschwunden
 
 # --- LOGIN-MODUL ---
 if "user" not in st.session_state:
