@@ -91,7 +91,7 @@ def login_view():
         f"?provider=azure"
         f"&redirect_to={redirect_url}"
     )
-    st.markdown(f'<a href="{oauth_url}" target="_self"><button>Mit Microsoft anmelden</button></a>', unsafe_allow_html=True)
+    st.markdown(f'<a href="{oauth_url}" target="_blank"><button>Mit Microsoft anmelden</button></a>', unsafe_allow_html=True)
     # Nach erfolgreichem Login wird der User zu redirect_url zurückgeleitet, mit einem Access-Token im URL-Fragment.
     # Diesen musst du auslesen und mit supabase.auth.get_user() validieren.
 
