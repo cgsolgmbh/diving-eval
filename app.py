@@ -2,6 +2,7 @@ import datetime
 import pandas as pd
 from supabase import create_client, Client
 import streamlit as st
+st.write("Streamlit Version:", st.__version__)
 import importlib
 import matplotlib.pyplot as plt
 import seaborn as sns
