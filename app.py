@@ -92,7 +92,7 @@ def login_view():
     )
     st.markdown(
         f'''
-        <a href="{oauth_url}" target="_blank" style="text-decoration:none;">
+        <a href="{oauth_url}" target="_self" style="text-decoration:none;">
             <button style="
                 background-color:#2d7ff9;
                 color:white;
