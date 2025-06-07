@@ -6,7 +6,6 @@ import importlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-st.write("Aktuelle Query-Parameter:", st.query_params)
 # --- JavaScript-Snippet für OAuth-Token-Handling ---
 st.components.v1.html("""
 <script>
@@ -21,7 +20,7 @@ if (window.location.hash) {
 }
 </script>
 """)
-
+st.write("Aktuelle Query-Parameter:", st.query_params)
 # 🔑 Supabase-Konfiguration
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
