@@ -58,9 +58,6 @@ def login_view():
             auth_result = supabase.auth.sign_in_with_password({"email": email, "password": password})
             user = auth_result.user
 
-            st.write("DEBUG: Auth-Result", auth_result)
-            st.write("DEBUG: User nach Login", user)
-
             if not user:
                 st.error("Login fehlgeschlagen – Benutzer nicht gefunden.")
                 return
