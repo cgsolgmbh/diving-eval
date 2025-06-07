@@ -6,6 +6,10 @@ import importlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+
+st.write("Query-Params:", st.query_params)
+st.write("Session-State:", dict(st.session_state))
+
 # --- JavaScript-Snippet für OAuth-Token-Handling ---
 st.components.v1.html("""
 <script>
@@ -88,7 +92,6 @@ def login_view():
         f"&redirect_to={redirect_url}"
     )
     st.markdown(f'<a href="{oauth_url}" target="_self"><button>Mit Microsoft anmelden</button></a>', unsafe_allow_html=True)
-    st.write("Aktuelle Query-Parameter:", st.query_params)
     # Nach erfolgreichem Login wird der User zu redirect_url zurückgeleitet, mit einem Access-Token im URL-Fragment.
     # Diesen musst du auslesen und mit supabase.auth.get_user() validieren.
 
