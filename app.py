@@ -2794,22 +2794,6 @@ def referenztabellen_anzeigen():
     else:
         st.info("Keine Daten in pisterefcomppoints.")
 
-    # --- selectionpoints (zweites Mal, falls gewünscht) ---
-    st.subheader("🎯 Selectionpoints (Jahr/Competition)")
-    sel2_df = pd.DataFrame(fetch_all_rows("selectionpoints", select="*"))
-    if not sel2_df.empty:
-        cols = ["year", "Competition", "Category", "Discipline", "sex", "points"]
-        for col in cols:
-            if col not in sel2_df.columns:
-                sel2_df[col] = None
-        sel2_df = sel2_df[cols]
-        st.dataframe(sel2_df)
-        st.download_button("📥 selectionpoints (Jahr/Competition) als CSV", sel2_df.to_csv(index=False, encoding='utf-8-sig'), file_name="selectionpoints_jahr_competition.csv", mime="text/csv")
-    else:
-        st.info("Keine Daten in selectionpoints.")
-
-
-
 # Hauptmenü
 def main():
     if "page" not in st.session_state:
