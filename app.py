@@ -42,9 +42,6 @@ if "access_token" not in st.session_state:
         # Kein st.rerun() mehr hier!
         # Seite wird ohnehin durch das JavaScript-Snippet neu geladen
         # und der Token ist dann aus der URL verschwunden
-        st.write("DEBUG: access_token", st.session_state.get("access_token"))
-        st.write("DEBUG: User nach OAuth", user)
-
 
 # --- LOGIN-MODUL ---
 if "user" not in st.session_state:
@@ -66,6 +63,7 @@ def login_view():
                 return
 
             erlaubte_emails = [
+                "chris@greuters.com"
                 "christian.greuter@outlook.com",
                 "christian.greuter@cgsol.ch",
                 "christian.greuter@swiss-aquatics.ch",
