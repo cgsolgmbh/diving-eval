@@ -311,10 +311,12 @@ def manage_results_entry():
             input_data.append((discipline_id, value))
 
         if st.button("💾 Ergebnisse speichern"):
+            # IDs der Disziplinen, für die KEINE Punkte berechnet werden
             excluded_ids = {
                 "640260ec-a094-462d-a69e-d91bbe35d94c",  # BodyWeight
                 "5906836a-24aa-40e1-a71f-614a7ea4a825",  # BodySize
                 "7eb062f7-3329-4cde-8875-bd6fd362137b",  # UpperBodySize
+                "8992e776-6eab-451d-8030-8265c80b8ce2",  # NumberOfDisc
             }
 
             for discipline_id, raw_result in input_data:
@@ -346,41 +348,41 @@ def manage_results_entry():
                         'TestYear': int(test_year)
                     }).execute()
 
-                # --- Gesamtpunktzahl als eigenen Eintrag speichern ---
-                # Disziplin-ID für "PisteTotalinPoints" holen
-                pistetotalinpoints_id = None
-                for d in pistedisciplines:
-                    if d["name"] == "PisteTotalinPoints":
-                        pistetotalinpoints_id = d["id"]
-                        break
+            # --- Gesamtpunktzahl als eigenen Eintrag speichern ---
+            # Disziplin-ID für "PisteTotalinPoints" holen
+            pistetotalinpoints_id = None
+            for d in pistedisciplines:
+                if d["name"] == "PisteTotalinPoints":
+                    pistetotalinpoints_id = d["id"]
+                    break
 
-                if pistetotalinpoints_id:
-                    # Summe aller Einzelpunkte (außer ausgeschlossene Disziplinen)
-                    total_points = sum(
-                        get_points(discipline_id, value, category, sex)
-                        for discipline_id, value in input_data
-                        if discipline_id not in excluded_ids and value > 0
-                    )
-                    # Prüfe, ob schon ein Eintrag existiert
-                    existing_total = supabase.table('pisteresults').select('id').eq('athlete_id', athlete_id)\
-                        .eq('discipline_id', pistetotalinpoints_id).eq('TestYear', int(test_year)).execute().data
-                    if existing_total:
-                        supabase.table('pisteresults').update({
-                            'raw_result': total_points,
-                            'points': total_points,
-                            'category': category,
-                            'sex': sex
-                        }).eq('id', existing_total[0]['id']).execute()
-                    else:
-                        supabase.table('pisteresults').insert({
-                            'athlete_id': athlete_id,
-                            'discipline_id': pistetotalinpoints_id,
-                            'raw_result': total_points,
-                            'points': total_points,
-                            'category': category,
-                            'sex': sex,
-                            'TestYear': int(test_year)
-                        }).execute()
+            if pistetotalinpoints_id:
+                # Summe aller Einzelpunkte (außer ausgeschlossene Disziplinen)
+                total_points = sum(
+                    get_points(discipline_id, value, category, sex)
+                    for discipline_id, value in input_data
+                    if discipline_id not in excluded_ids and value > 0
+                )
+                # Prüfe, ob schon ein Eintrag existiert
+                existing_total = supabase.table('pisteresults').select('id').eq('athlete_id', athlete_id)\
+                    .eq('discipline_id', pistetotalinpoints_id).eq('TestYear', int(test_year)).execute().data
+                if existing_total:
+                    supabase.table('pisteresults').update({
+                        'raw_result': total_points,
+                        'points': total_points,
+                        'category': category,
+                        'sex': sex
+                    }).eq('id', existing_total[0]['id']).execute()
+                else:
+                    supabase.table('pisteresults').insert({
+                        'athlete_id': athlete_id,
+                        'discipline_id': pistetotalinpoints_id,
+                        'raw_result': total_points,
+                        'points': total_points,
+                        'category': category,
+                        'sex': sex,
+                        'TestYear': int(test_year)
+                    }).execute()
 
             st.success("✅ Ergebnisse gespeichert und Punkte berechnet!")
     st.markdown("---")
