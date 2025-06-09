@@ -624,21 +624,29 @@ def auswertung_starten():
         # DataFrame erzeugen
         df = pd.DataFrame.from_dict(results_dict, orient='index').reset_index(drop=True)
 
-        # --- NEU: NumberOfDisc anzeigen ---
         # Ermittle die discipline_id für NumberOfDisc
         numberofdisc_id = None
         for d in disciplines:
             if d['name'] == "NumberOfDisc":
                 numberofdisc_id = d['id']
                 break
+
         if numberofdisc_id:
             # Füge die Spalte "NumberOfDisc_Wert" hinzu
+            # Wir brauchen athlete_id und Testjahr für den Lookup
+            # Also: erstelle eine Hilfsspalte mit athlete_id
+            athlete_id_lookup = {v: k[0] for k, v in results_dict.items()}  # k = (athlete_id, year)
+            df["athlete_id"] = df.apply(
+                lambda row: next((k[0] for k, v in results_dict.items() if v["Name"] == row["Name"] and v["Testjahr"] == row["Testjahr"]), None),
+                axis=1
+            )
             df["NumberOfDisc_Wert"] = df.apply(
                 lambda row: raw_result_lookup.get(
-                    (athlete_names.get(row["Name"], None), numberofdisc_id, row["Testjahr"])
+                    (row["athlete_id"], numberofdisc_id, row["Testjahr"])
                 ),
                 axis=1
             )
+            df = df.drop(columns=["athlete_id"])
 
         st.dataframe(df)
 
