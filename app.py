@@ -315,7 +315,6 @@ def manage_results_entry():
                 "640260ec-a094-462d-a69e-d91bbe35d94c",  # BodyWeight
                 "5906836a-24aa-40e1-a71f-614a7ea4a825",  # BodySize
                 "7eb062f7-3329-4cde-8875-bd6fd362137b",  # UpperBodySize
-                "8992e776-6eab-451d-8030-8265c80b8ce2",  # NumberOfDisc
             }
 
             for discipline_id, raw_result in input_data:
@@ -323,7 +322,7 @@ def manage_results_entry():
                     continue
 
                 # Punkte berechnen (außer bei ausgeschlossenen Disziplinen)
-                 points = 0 if discipline_id in excluded_ids else get_points(discipline_id, raw_result, category, sex)
+                points = 0 if discipline_id in excluded_ids else get_points(discipline_id, raw_result, category, sex)
 
                 # Vorhandene Zeile prüfen
                 existing = supabase.table('pisteresults').select('id').eq('athlete_id', athlete_id)\
@@ -438,7 +437,6 @@ def manage_results_entry():
             "640260ec-a094-462d-a69e-d91bbe35d94c",  # BodyWeight
             "5906836a-24aa-40e1-a71f-614a7ea4a825",  # BodySize
             "7eb062f7-3329-4cde-8875-bd6fd362137b",  # UpperBodySize
-            "8992e776-6eab-451d-8030-8265c80b8ce2",  # NumberOfDisc
         }
 
         inserted_count = 0
