@@ -406,7 +406,7 @@ def manage_results_entry():
         "Split": [4],
         "Handstand": [12],
         "PullUp": [3],
-        "GlobalCore": [210]
+        "GlobalCore": [210],
         "NumberOfDisc": [13]
     }
     example_df = pd.DataFrame(example_data)
