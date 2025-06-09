@@ -425,9 +425,8 @@ def manage_results_entry():
             df = pd.read_excel(uploaded_file)
 
         expected_base = ["Testjahr", "first_name", "last_name"]
-        expected_columns = expected_base + list(example_data.keys())[3:]
-        if not all(col in df.columns for col in expected_columns):
-            st.error(f"❌ Die Datei muss folgende Spalten enthalten:\n\n{', '.join(expected_columns)}")
+        if not all(col in df.columns for col in expected_base):
+            st.error(f"❌ Die Datei muss folgende Spalten enthalten:\n\n{', '.join(expected_base)}")
             return
 
         discipline_map = {d['name'].replace(" ", "").lower(): d['id'] for d in pistedisciplines}
