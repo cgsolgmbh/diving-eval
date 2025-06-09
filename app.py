@@ -298,7 +298,7 @@ def manage_results_entry():
         allowed_disciplines = [
             "BodySize", "UpperBodySize", "JumpHeight", "102c", "202c", "302c", "402c",
             "ABSWallbar", "ShoulderEvel", "ShoulderExt", "PikePosition", "Split",
-            "Handstand", "PullUp", "GlobalCore"
+            "Handstand", "PullUp", "GlobalCore", "NumberOfDisc"
         ]
         # Mapping für schnellen Zugriff
         discipline_map = {d["name"]: d for d in pistedisciplines}
@@ -407,6 +407,7 @@ def manage_results_entry():
         "Handstand": [12],
         "PullUp": [3],
         "GlobalCore": [210]
+        "NumberOfDisc": [13]
     }
     example_df = pd.DataFrame(example_data)
     st.download_button("📄 Beispiel-Datei herunterladen", example_df.to_csv(index=False).encode("utf-8"), file_name="beispiel_ergebnisse.csv", mime="text/csv")
