@@ -323,7 +323,7 @@ def manage_results_entry():
                     continue
 
                 # Punkte berechnen (außer bei ausgeschlossenen Disziplinen)
-                points = 0 if discipline_id in excluded_ids else get_points(discipline_id, raw_result, category, sex)
+                 points = 0 if discipline_id in excluded_ids else get_points(discipline_id, raw_result, category, sex)
 
                 # Vorhandene Zeile prüfen
                 existing = supabase.table('pisteresults').select('id').eq('athlete_id', athlete_id)\
