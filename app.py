@@ -621,25 +621,26 @@ def auswertung_starten():
         results_dict[key][f"{discipline_name}_Punkte"] = points
         results_dict[key]["Totalpunkte"] += points
 
-        # Punktewert für PisteinPoints aus scoretables holen
-        pisteinpoints_id = None
-        for d in supabase.table('pistedisciplines').select('id, name').execute().data:
-            if d['name'] == "PisteinPoints":
-                pisteinpoints_id = d['id']
+        # DataFrame erzeugen
+        df = pd.DataFrame.from_dict(results_dict, orient='index').reset_index(drop=True)
+
+        # --- NEU: NumberOfDisc anzeigen ---
+        # Ermittle die discipline_id für NumberOfDisc
+        numberofdisc_id = None
+        for d in disciplines:
+            if d['name'] == "NumberOfDisc":
+                numberofdisc_id = d['id']
                 break
+        if numberofdisc_id:
+            # Füge die Spalte "NumberOfDisc_Wert" hinzu
+            df["NumberOfDisc_Wert"] = df.apply(
+                lambda row: raw_result_lookup.get(
+                    (athlete_names.get(row["Name"], None), numberofdisc_id, row["Testjahr"])
+                ),
+                axis=1
+            )
 
-        if pisteinpoints_id:
-            scoretable_row = supabase.table('scoretables').select('*').eq('discipline_id', pisteinpoints_id).execute().data
-            if scoretable_row:
-                piste_value = scoretable_row[0]['points']
-            else:
-                piste_value = None
-        else:
-            piste_value = None
-
-    # DataFrame erzeugen
-    df = pd.DataFrame.from_dict(results_dict, orient='index').reset_index(drop=True)
-    st.dataframe(df)
+        st.dataframe(df)
 
     st.download_button("📥 CSV herunterladen", df.to_csv(index=False, encoding='utf-8-sig'), file_name="resultate.csv", mime='text/csv')
 
