@@ -621,35 +621,25 @@ def auswertung_starten():
         results_dict[key][f"{discipline_name}_Punkte"] = points
         results_dict[key]["Totalpunkte"] += points
 
-        # DataFrame erzeugen
-        df = pd.DataFrame.from_dict(results_dict, orient='index').reset_index(drop=True)
-
-        # Ermittle die discipline_id für NumberOfDisc
-        numberofdisc_id = None
-        for d in disciplines:
-            if d['name'] == "NumberOfDisc":
-                numberofdisc_id = d['id']
+        # Punktewert für PisteinPoints aus scoretables holen
+        pisteinpoints_id = None
+        for d in supabase.table('pistedisciplines').select('id, name').execute().data:
+            if d['name'] == "PisteinPoints":
+                pisteinpoints_id = d['id']
                 break
 
-        if numberofdisc_id:
-            # Füge die Spalte "athlete_id" für den Lookup hinzu
-            # Wir suchen für jede Zeile im DataFrame das passende athlete_id und Testjahr aus results_dict
-            df["athlete_id"] = df.apply(
-                lambda row: next(
-                    (k[0] for k, v in results_dict.items() if v["Name"] == row["Name"] and v["Testjahr"] == row["Testjahr"]),
-                    None
-                ),
-                axis=1
-            )
-            df["NumberOfDisc_Wert"] = df.apply(
-                lambda row: raw_result_lookup.get(
-                    (row["athlete_id"], numberofdisc_id, row["Testjahr"])
-                ),
-                axis=1
-            )
-            df = df.drop(columns=["athlete_id"])
+        if pisteinpoints_id:
+            scoretable_row = supabase.table('scoretables').select('*').eq('discipline_id', pisteinpoints_id).execute().data
+            if scoretable_row:
+                piste_value = scoretable_row[0]['points']
+            else:
+                piste_value = None
+        else:
+            piste_value = None
 
-        st.dataframe(df)
+    # DataFrame erzeugen
+    df = pd.DataFrame.from_dict(results_dict, orient='index').reset_index(drop=True)
+    st.dataframe(df)
 
     st.download_button("📥 CSV herunterladen", df.to_csv(index=False, encoding='utf-8-sig'), file_name="resultate.csv", mime='text/csv')
 
