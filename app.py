@@ -469,10 +469,12 @@ def manage_results_entry():
                 if discipline_name in expected_base or pd.isna(raw_result):
                     continue
 
-                if discipline_name not in discipline_map:
+                # Mapping robust machen:
+                discipline_key = discipline_name.replace(" ", "").lower()
+                if discipline_key not in discipline_map:
                     continue
 
-                discipline_id = discipline_map[discipline_name]
+                discipline_id = discipline_map[discipline_key]
                 # Nur für NumberOfDisc: Wert speichern, Punkte immer 0
                 if discipline_id == "8992e776-6eab-451d-8030-8265c80b8ce2":
                     points = 0
@@ -499,7 +501,6 @@ def manage_results_entry():
                         'sex': sex,
                         'TestYear': test_year
                     }).execute()
-
                 inserted_count += 1
 
         st.success(f"✅ {inserted_count} Ergebnisse importiert.")
