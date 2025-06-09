@@ -632,12 +632,13 @@ def auswertung_starten():
                 break
 
         if numberofdisc_id:
-            # Füge die Spalte "NumberOfDisc_Wert" hinzu
-            # Wir brauchen athlete_id und Testjahr für den Lookup
-            # Also: erstelle eine Hilfsspalte mit athlete_id
-            athlete_id_lookup = {v: k[0] for k, v in results_dict.items()}  # k = (athlete_id, year)
+            # Füge die Spalte "athlete_id" für den Lookup hinzu
+            # Wir suchen für jede Zeile im DataFrame das passende athlete_id und Testjahr aus results_dict
             df["athlete_id"] = df.apply(
-                lambda row: next((k[0] for k, v in results_dict.items() if v["Name"] == row["Name"] and v["Testjahr"] == row["Testjahr"]), None),
+                lambda row: next(
+                    (k[0] for k, v in results_dict.items() if v["Name"] == row["Name"] and v["Testjahr"] == row["Testjahr"]),
+                    None
+                ),
                 axis=1
             )
             df["NumberOfDisc_Wert"] = df.apply(
