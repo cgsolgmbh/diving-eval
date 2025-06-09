@@ -323,10 +323,12 @@ def manage_results_entry():
                 if raw_result <= 0:
                     continue
 
-                # Punkte berechnen (außer bei ausgeschlossenen Disziplinen)
-                points = 0 if discipline_id in excluded_ids else get_points(discipline_id, raw_result, category, sex)
+                # Nur für NumberOfDisc: Wert speichern, Punkte immer 0
+                if discipline_id == "8992e776-6eab-451d-8030-8265c80b8ce2":
+                    points = 0
+                else:
+                    points = get_points(discipline_id, raw_result, category, sex)
 
-                # Vorhandene Zeile prüfen
                 existing = supabase.table('pisteresults').select('id').eq('athlete_id', athlete_id)\
                     .eq('discipline_id', discipline_id).eq('TestYear', int(test_year)).execute().data
 
@@ -464,35 +466,39 @@ def manage_results_entry():
             category = get_category_from_testyear(vintage, test_year)
 
             for discipline_name, raw_result in row.items():
-                if discipline_name in expected_base or pd.isna(raw_result):
-                    continue
+            if discipline_name in expected_base or pd.isna(raw_result):
+                continue
 
-                if discipline_name not in discipline_map:
-                    continue
+            if discipline_name not in discipline_map:
+                continue
 
-                discipline_id = discipline_map[discipline_name]
-                points = 0 if discipline_id in excluded_ids else get_points(discipline_id, raw_result, category, sex)
+            discipline_id = discipline_map[discipline_name]
+            # Nur für NumberOfDisc: Wert speichern, Punkte immer 0
+            if discipline_id == "8992e776-6eab-451d-8030-8265c80b8ce2":
+                points = 0
+            else:
+                points = get_points(discipline_id, raw_result, category, sex)
 
-                existing = supabase.table('pisteresults').select('id').eq('athlete_id', athlete_id)\
-                    .eq('discipline_id', discipline_id).eq('TestYear', test_year).execute().data
+            existing = supabase.table('pisteresults').select('id').eq('athlete_id', athlete_id)\
+                .eq('discipline_id', discipline_id).eq('TestYear', test_year).execute().data
 
-                if existing:
-                    supabase.table('pisteresults').update({
-                        'raw_result': raw_result,
-                        'points': points,
-                        'category': category,
-                        'sex': sex
-                    }).eq('id', existing[0]['id']).execute()
-                else:
-                    supabase.table('pisteresults').insert({
-                        'athlete_id': athlete_id,
-                        'discipline_id': discipline_id,
-                        'raw_result': raw_result,
-                        'points': points,
-                        'category': category,
-                        'sex': sex,
-                        'TestYear': test_year
-                    }).execute()
+            if existing:
+                supabase.table('pisteresults').update({
+                    'raw_result': raw_result,
+                    'points': points,
+                    'category': category,
+                    'sex': sex
+                }).eq('id', existing[0]['id']).execute()
+            else:
+                supabase.table('pisteresults').insert({
+                    'athlete_id': athlete_id,
+                    'discipline_id': discipline_id,
+                    'raw_result': raw_result,
+                    'points': points,
+                    'category': category,
+                    'sex': sex,
+                    'TestYear': test_year
+                }).execute()
 
                 inserted_count += 1
 
