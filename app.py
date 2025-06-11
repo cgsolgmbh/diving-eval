@@ -579,10 +579,11 @@ def auswertung_starten():
         for r in raw_results
     }
 
-    # Alle Filteroptionen extrahieren
+    # Filteroptionen extrahieren
     all_years = sorted(set([r['TestYear'] for r in results if r['TestYear']]), reverse=True)
     all_categories = sorted(set([r['category'] for r in results if r['category']]))
     all_sexes = sorted(set([r['sex'] for r in results if r.get('sex')]))
+    all_names = sorted(set([athlete_lookup.get(r['athlete_id'], "Unbekannt") for r in results]))
 
     # Dynamische Multiselect-Funktion
     def dynamic_multiselect(label, options, key):
@@ -605,6 +606,7 @@ def auswertung_starten():
     selected_years = dynamic_multiselect("📅 Testjahr wählen", all_years, "jahr")
     selected_categories = dynamic_multiselect("📂 Kategorie wählen", all_categories, "kategorie")
     selected_sexes = dynamic_multiselect("⚧ Geschlecht wählen", all_sexes, "geschlecht")
+    selected_names = dynamic_multiselect("👤 Name wählen", all_names, "name")  # <--- NEU
 
     # Daten filtern
     filtered = results
@@ -614,6 +616,9 @@ def auswertung_starten():
         filtered = [r for r in filtered if r['category'] in selected_categories]
     if "Alle" not in selected_sexes:
         filtered = [r for r in filtered if r.get('sex') in selected_sexes]
+    if "Alle" not in selected_names:
+        filtered = [r for r in filtered if athlete_lookup.get(r['athlete_id'], "Unbekannt") in selected_names]  # <--- NEU
+
 
     # Ergebnisstruktur
     results_dict = {}
