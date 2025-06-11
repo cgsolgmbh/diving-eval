@@ -1119,12 +1119,14 @@ def punkte_neuberechnen():
                 }).execute()
 
         # --- Durchschnitt als eigenen Eintrag speichern ---
+        st.info(f"Alle Disziplinen: {[d['name'] for d in pistedisciplines]}")
+        
         pistepointsdurchschnitt_id = None
         for d in pistedisciplines:
             if d["name"] == "PistePointsDurchschnitt":
                 pistepointsdurchschnitt_id = d["id"]
                 break
-
+        st.info(f"Gefundene ID für PistePointsDurchschnitt: {pistepointsdurchschnitt_id}")
         if pistepointsdurchschnitt_id:
             # Jetzt ALLE gespeicherten Einzelpunkte für diesen Athleten/Jahr laden
             all_results = supabase.table("pisteresults").select("discipline_id, points").eq("athlete_id", athlete_id).eq("TestYear", int(test_year)).execute().data
