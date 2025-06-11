@@ -413,7 +413,7 @@ def manage_results_entry():
                     all_results = supabase.table("pisteresults").select("discipline_id, points").eq("athlete_id", athlete_id).eq("TestYear", int(test_year)).execute().data
                     single_points = [
                         r["points"] for r in all_results
-                        if r["discipline_id"] not in excluded_ids and r.get("points") is not None
+                        if r["discipline_id"] not in excluded_ids and r.get("points") not in (None, 0)
                     ]
                     avg_points = round(sum(single_points) / len(single_points), 2) if single_points else 0
 
@@ -562,7 +562,7 @@ def manage_results_entry():
                 all_results = supabase.table("pisteresults").select("discipline_id, points").eq("athlete_id", athlete_id).eq("TestYear", test_year).execute().data
                 single_points = [
                     r["points"] for r in all_results
-                    if r["discipline_id"] not in excluded_ids and r.get("points") is not None
+                    if r["discipline_id"] not in excluded_ids and r.get("points") not in (None, 0)
                 ]
                 avg_points = round(sum(single_points) / len(single_points), 2) if single_points else 0
 
@@ -1046,7 +1046,7 @@ def punkte_neuberechnen():
             }
             single_points = [
                 r["points"] for r in all_results
-                if r["discipline_id"] not in excluded_ids and r.get("points") is not None
+                if r["discipline_id"] not in excluded_ids and r.get("points") not in (None, 0)
             ]
             avg_points = round(sum(single_points) / len(single_points), 2) if single_points else 0
 
