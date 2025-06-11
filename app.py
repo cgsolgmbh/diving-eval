@@ -401,7 +401,41 @@ def manage_results_entry():
                         'sex': sex,
                         'TestYear': int(test_year)
                     }).execute()
+                # --- Durchschnitt als eigenen Eintrag speichern ---
+                pistepointsdurchschnitt_id = None
+                for d in pistedisciplines:
+                    if d["name"] == "PistePointsDurchschnitt":
+                        pistepointsdurchschnitt_id = d["id"]
+                        break
 
+                if pistepointsdurchschnitt_id:
+                    # Liste aller Einzelpunkte (außer ausgeschlossene Disziplinen)
+                    single_points = [
+                        get_points(discipline_id, value, category, sex)
+                        for discipline_id, value in input_data
+                        if discipline_id not in excluded_ids and value > 0
+                    ]
+                    avg_points = round(sum(single_points) / len(single_points), 2) if single_points else 0
+
+                    existing_avg = supabase.table('pisteresults').select('id').eq('athlete_id', athlete_id)\
+                        .eq('discipline_id', pistepointsdurchschnitt_id).eq('TestYear', int(test_year)).execute().data
+                    if existing_avg:
+                        supabase.table('pisteresults').update({
+                            'raw_result': avg_points,
+                            'points': 0,
+                            'category': category,
+                            'sex': sex
+                        }).eq('id', existing_avg[0]['id']).execute()
+                    else:
+                        supabase.table('pisteresults').insert({
+                            'athlete_id': athlete_id,
+                            'discipline_id': pistepointsdurchschnitt_id,
+                            'raw_result': avg_points,
+                            'points': 0,
+                            'category': category,
+                            'sex': sex,
+                            'TestYear': int(test_year)
+                        }).execute()
             st.success("✅ Ergebnisse gespeichert und Punkte berechnet!")
     st.markdown("---")
     st.subheader("📤 Ergebnisse per Datei importieren")
@@ -516,6 +550,45 @@ def manage_results_entry():
                         'sex': sex,
                         'TestYear': test_year
                     }).execute()
+            #--- Durchschnitt als eigenen Eintrag speichern ---
+            pistepointsdurchschnitt_id = None
+            for d in pistedisciplines:
+                if d["name"] == "PistePointsDurchschnitt":
+                    pistepointsdurchschnitt_id = d["id"]
+                    break
+
+            if pistepointsdurchschnitt_id:
+                # Einzelpunkte für diese Zeile sammeln
+                single_points = [
+                    get_points(discipline_map[discipline_name.replace(" ", "").lower()], row[discipline_name], category, sex)
+                    for discipline_name in row.index
+                    if discipline_name not in expected_base
+                    and pd.notna(row[discipline_name])
+                    and discipline_name.replace(" ", "").lower() in discipline_map
+                    and discipline_map[discipline_name.replace(" ", "").lower()] not in excluded_ids
+                    and row[discipline_name] > 0
+                ]
+                avg_points = round(sum(single_points) / len(single_points), 2) if single_points else 0
+
+                existing_avg = supabase.table('pisteresults').select('id').eq('athlete_id', athlete_id)\
+                    .eq('discipline_id', pistepointsdurchschnitt_id).eq('TestYear', test_year).execute().data
+                if existing_avg:
+                    supabase.table('pisteresults').update({
+                        'raw_result': avg_points,
+                        'points': 0,
+                        'category': category,
+                        'sex': sex
+                    }).eq('id', existing_avg[0]['id']).execute()
+                else:
+                    supabase.table('pisteresults').insert({
+                        'athlete_id': athlete_id,
+                        'discipline_id': pistepointsdurchschnitt_id,
+                        'raw_result': avg_points,
+                        'points': 0,
+                        'category': category,
+                        'sex': sex,
+                        'TestYear': test_year
+                    }).execute()                    
                 inserted_count += 1
 
         st.success(f"✅ {inserted_count} Ergebnisse importiert.")
@@ -1047,6 +1120,42 @@ def punkte_neuberechnen():
                     'category': category,
                     'sex': sex,
                     'TestYear': int(test_year)
+                }).execute()
+
+        # --- Durchschnitt als eigenen Eintrag speichern ---
+        pistepointsdurchschnitt_id = None
+        for d in pistedisciplines:
+            if d["name"] == "PistePointsDurchschnitt":
+                pistepointsdurchschnitt_id = d["id"]
+                break
+
+        if pistepointsdurchschnitt_id:
+            # Alle Einzelpunkte für diesen Athleten und dieses Jahr laden
+            all_results = supabase.table("pisteresults").select("discipline_id, points").eq("athlete_id", athlete_id).eq("TestYear", selected_year).execute().data
+            single_points = [
+                r["points"] for r in all_results
+                if r["discipline_id"] not in excluded_ids and r.get("points") is not None
+            ]
+            avg_points = round(sum(single_points) / len(single_points), 2) if single_points else 0
+
+            existing_avg = supabase.table('pisteresults').select('id').eq('athlete_id', athlete_id)\
+                .eq('discipline_id', pistepointsdurchschnitt_id).eq('TestYear', int(selected_year)).execute().data
+            if existing_avg:
+                supabase.table('pisteresults').update({
+                    'raw_result': avg_points,
+                    'points': 0,
+                    'category': category,
+                    'sex': sex
+                }).eq('id', existing_avg[0]['id']).execute()
+            else:
+                supabase.table('pisteresults').insert({
+                    'athlete_id': athlete_id,
+                    'discipline_id': pistepointsdurchschnitt_id,
+                    'raw_result': avg_points,
+                    'points': 0,
+                    'category': category,
+                    'sex': sex,
+                    'TestYear': int(selected_year)
                 }).execute()
 
         st.success(f"✅ {updated_count} Resultate für das Jahr {selected_year} wurden neu bewertet.")
