@@ -1111,10 +1111,15 @@ def punkte_neuberechnen():
 
         st.success(f"✅ {updated_count} Resultate für das Jahr {selected_year} wurden neu bewertet.")
 
-def auswertung_wettkampf():
-    st.header("🏅 Wettkampfauswertungen")
+def bewertung_wettkampf():
+    st.header("🔄 Wettkampfbewertungen berechnen")
 
-    # Hilfsfunktion für die Prozentwerte
+    selection_points = fetch_all_rows('selectionpoints')
+    competitions = fetch_all_rows('competitions')
+    agedives = fetch_all_rows('agedives')
+    df_agedives = pd.DataFrame(agedives)
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     def safe_numeric(val):
         if val in ("", None):
             return None
@@ -1123,233 +1128,181 @@ def auswertung_wettkampf():
         except Exception:
             return None
 
-    selection_points = supabase.table('selectionpoints').select('*').execute().data
-    competitions = supabase.table('competitions').select('*').execute().data
-    agedives = supabase.table('agedives').select('*').execute().data
-    df_agedives = pd.DataFrame(agedives)
-
-    # Für die Anzeige nach der Berechnung: alle Zeilen holen (in Blöcken)
-    def fetch_all_compresults():
-        all_rows = []
-        offset = 0
-        while True:
-            rows = supabase.table('compresults').select('*').range(offset, offset + 999).execute().data
-            if not rows:
-                break
-            all_rows.extend(rows)
-            if len(rows) < 1000:
-                break
-            offset += 1000
-        return all_rows
-
-    
-    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Hilfsfunktion für Status
+    def get_status(selection_row, qual_flag, points):
+        if selection_row.empty:
+            return "no", "", "no"
+        limit = float(selection_row.iloc[0]['points'])
+        percentage = round((points / limit) * 100, 1)
+        if qual_flag:
+            status = "yes" if points >= limit else "no"
+        else:
+            status = "no"
+        national = "yes" if percentage >= 90 else "no"
+        return status, f"{percentage}%", national
 
     # Button für ALLE berechnen
-    if st.button("🔄 Wettkampfbewertungen TOTAL"):
-        offset = 0
-        while True:
-            comp_results = supabase.table('compresults').select('*').range(offset, offset + 999).execute().data
-            if not comp_results:
-                break
+    if st.button("🔄 Alle Wettkampfbewertungen berechnen"):
+        comp_results = fetch_all_rows('compresults')
+        df_results = pd.DataFrame(comp_results)
+        df_selection = pd.DataFrame(selection_points)
+        df_comp = pd.DataFrame(competitions)
 
-            df_results = pd.DataFrame(comp_results)
-            df_selection = pd.DataFrame(selection_points)
-            df_comp = pd.DataFrame(competitions)
+        for _, row in df_results.iterrows():
+            comp_id = row["id"]
+            sex = row["sex"]
+            discipline = row["Discipline"]
+            category = row["CategoryStart"]
+            points = row["Points"]
+            competition_name = row["Competition"]
 
-            for _, row in df_results.iterrows():
-                comp_id = row["id"]
-                first = row["first_name"]
-                last = row["last_name"]
-                sex = row["sex"]
-                discipline = row["Discipline"]
-                category = row["CategoryStart"]
-                points = row["Points"]
-                competition_name = row["Competition"]
-                # dives aus agedives holen
-                # Robust gegen fehlende oder anders geschriebene Spalten
-                # Robust gegen unterschiedliche Schreibweisen und Datentypen
-                # Robust gegen unterschiedliche Schreibweisen und Datentypen
-                if all(col in df_agedives.columns for col in ['sex', 'category', 'Discipline', 'dives']):
-                    # Vergleiche alles als String, ohne führende/trailing Leerzeichen, alles klein
-                    dives_row = df_agedives[
-                        (df_agedives['sex'].astype(str).str.strip().str.lower() == str(sex).strip().lower()) &
-                        (df_agedives['category'].astype(str).str.strip().str.lower() == str(category).strip().lower()) &
-                        (df_agedives['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower())
-                    ]
-
-                    dives = dives_row.iloc[0]['dives'] if not dives_row.empty else None
-                else:
-                    dives = None
-
-                # AveragePoints berechnen
-                average_points = None
-                try:
-                    points_val = float(points)
-                    dives_val = float(dives)
-                    average_points = points_val / dives_val if dives_val else None
-                except Exception:
-                    average_points = None
-                    
-                comp_row = df_comp[df_comp["Name"] == competition_name]
-                comp_row = comp_row.iloc[0] if not comp_row.empty else {}
-
-                relevant_selection = df_selection[
-                    (df_selection['sex'] == sex) &
-                    (df_selection['Discipline'] == discipline) &
-                    (df_selection['category'] == category)
+            # dives holen
+            dives = None
+            if all(col in df_agedives.columns for col in ['sex', 'category', 'Discipline', 'dives']):
+                dives_row = df_agedives[
+                    (df_agedives['sex'].astype(str).str.strip().str.lower() == str(sex).strip().lower()) &
+                    (df_agedives['category'].astype(str).str.strip().str.lower() == str(category).strip().lower()) &
+                    (df_agedives['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower())
                 ]
+                dives = dives_row.iloc[0]['dives'] if not dives_row.empty else None
 
-                def get_status(selection_row, qual_flag):
-                    if selection_row.empty:
-                        return "no", "", "no"
-                    limit = float(selection_row.iloc[0]['points'])
-                    percentage = round((points / limit) * 100, 1)
-                    # Prozentwert immer berechnen, Status aber nur wenn qual_flag True
-                    if qual_flag:
-                        status = "yes" if points >= limit else "no"
-                    else:
-                        status = "no"
-                    national = "yes" if percentage >= 90 else "no"
-                    return status, f"{percentage}%", national
+            # AveragePoints berechnen
+            average_points = None
+            try:
+                points_val = float(points)
+                dives_val = float(dives)
+                average_points = points_val / dives_val if dives_val else None
+            except Exception:
+                average_points = None
 
-                jem_row = relevant_selection[relevant_selection['Competition'] == "JEM"]
-                em_row = relevant_selection[relevant_selection['Competition'] == "EM"]
-                wm_row = relevant_selection[relevant_selection['Competition'] == "WM"]
-                regional_row = relevant_selection[relevant_selection['Competition'] == "Regional"]
+            comp_row = df_comp[df_comp["Name"] == competition_name]
+            comp_row = comp_row.iloc[0] if not comp_row.empty else {}
 
-                jem_qual = bool(comp_row.get("qual-JEM", False))
-                em_qual = bool(comp_row.get("qual-EM", False))
-                wm_qual = bool(comp_row.get("qual-WM", False))
-                regional_qual = bool(comp_row.get("qual-Regional", False))
+            relevant_selection = df_selection[
+                (df_selection['sex'] == sex) &
+                (df_selection['Discipline'] == discipline) &
+                (df_selection['category'] == category)
+            ]
 
-                jem, jem_pct, jem_nt = get_status(jem_row, jem_qual)
-                em, em_pct, em_nt = get_status(em_row, em_qual)
-                wm, wm_pct, wm_nt = get_status(wm_row, wm_qual)
-                regional, regional_pct, regional_nt = get_status(regional_row, regional_qual)
+            jem_row = relevant_selection[relevant_selection['Competition'] == "JEM"]
+            em_row = relevant_selection[relevant_selection['Competition'] == "EM"]
+            wm_row = relevant_selection[relevant_selection['Competition'] == "WM"]
+            regional_row = relevant_selection[relevant_selection['Competition'] == "Regional"]
 
-                nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
+            jem_qual = bool(comp_row.get("qual-JEM", False))
+            em_qual = bool(comp_row.get("qual-EM", False))
+            wm_qual = bool(comp_row.get("qual-WM", False))
+            regional_qual = bool(comp_row.get("qual-Regional", False))
 
-                supabase.table('compresults').update({
-                    "JEM": jem,
-                    "JEM%": safe_numeric(jem_pct),
-                    "EM": em,
-                    "EM%": safe_numeric(em_pct),
-                    "WM": wm,
-                    "WM%": safe_numeric(wm_pct),
-                    "NationalTeam": nationalteam,
-                    "RegionalTeam": regional,
-                    "AveragePoints": average_points,
-                    "timestamp": now_str
-                }).eq("id", comp_id).execute()
-            if len(comp_results) < 1000:
-                break
-            offset += 1000
+            jem, jem_pct, jem_nt = get_status(jem_row, jem_qual, points)
+            em, em_pct, em_nt = get_status(em_row, em_qual, points)
+            wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points)
+            regional, regional_pct, regional_nt = get_status(regional_row, regional_qual, points)
+
+            nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
+
+            supabase.table('compresults').update({
+                "JEM": jem,
+                "JEM%": safe_numeric(jem_pct),
+                "EM": em,
+                "EM%": safe_numeric(em_pct),
+                "WM": wm,
+                "WM%": safe_numeric(wm_pct),
+                "NationalTeam": nationalteam,
+                "RegionalTeam": regional,
+                "AveragePoints": average_points,
+                "timestamp": now_str
+            }).eq("id", comp_id).execute()
         st.success("Alle Wettkampfbewertungen wurden neu berechnet!")
 
     # Button für NUR neue Einträge berechnen
-    if st.button("🔄 Wettkampfberechnungen neue Einträge"):
-        offset = 0
-        while True:
-            comp_results = supabase.table('compresults').select('*').is_('timestamp', None).range(offset, offset + 999).execute().data
-            if not comp_results:
-                break
+    if st.button("🔄 Nur neue Einträge berechnen"):
+        comp_results = fetch_all_rows('compresults')
+        df_results = pd.DataFrame([r for r in comp_results if not r.get("timestamp")])
+        df_selection = pd.DataFrame(selection_points)
+        df_comp = pd.DataFrame(competitions)
 
-            df_results = pd.DataFrame(comp_results)
-            df_selection = pd.DataFrame(selection_points)
-            df_comp = pd.DataFrame(competitions)
+        for _, row in df_results.iterrows():
+            comp_id = row["id"]
+            sex = row["sex"]
+            discipline = row["Discipline"]
+            category = row["CategoryStart"]
+            points = row["Points"]
+            competition_name = row["Competition"]
 
-            for _, row in df_results.iterrows():
-                comp_id = row["id"]
-                first = row["first_name"]
-                last = row["last_name"]
-                sex = row["sex"]
-                discipline = row["Discipline"]
-                category = row["CategoryStart"]
-                points = row["Points"]
-                competition_name = row["Competition"]
-                # dives aus agedives holen
-                # Robust gegen fehlende oder anders geschriebene Spalten
-                # Robust gegen unterschiedliche Schreibweisen und Datentypen
-                if all(col in df_agedives.columns for col in ['sex', 'category', 'Discipline', 'dives']):
-                    # Vergleiche alles als String, ohne führende/trailing Leerzeichen, alles klein
-                    dives_row = df_agedives[
-                        (df_agedives['sex'].astype(str).str.strip().str.lower() == str(sex).strip().lower()) &
-                        (df_agedives['category'].astype(str).str.strip().str.lower() == str(category).strip().lower()) &
-                        (df_agedives['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower())
-                    ]
-                    dives = dives_row.iloc[0]['dives'] if not dives_row.empty else None
-                else:
-                    dives = None
-
-                # AveragePoints berechnen
-                average_points = None
-                try:
-                    points_val = float(points)
-                    dives_val = float(dives)
-                    average_points = points_val / dives_val if dives_val else None
-                except Exception:
-                    average_points = None
-
-                comp_row = df_comp[df_comp["Name"] == competition_name]
-                comp_row = comp_row.iloc[0] if not comp_row.empty else {}
-
-                relevant_selection = df_selection[
-                    (df_selection['sex'] == sex) &
-                    (df_selection['Discipline'] == discipline) &
-                    (df_selection['category'] == category)
+            # dives holen
+            dives = None
+            if all(col in df_agedives.columns for col in ['sex', 'category', 'Discipline', 'dives']):
+                dives_row = df_agedives[
+                    (df_agedives['sex'].astype(str).str.strip().str.lower() == str(sex).strip().lower()) &
+                    (df_agedives['category'].astype(str).str.strip().str.lower() == str(category).strip().lower()) &
+                    (df_agedives['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower())
                 ]
+                dives = dives_row.iloc[0]['dives'] if not dives_row.empty else None
 
-                def get_status(selection_row, qual_flag):
-                    if selection_row.empty:
-                        return "no", "", "no"
-                    limit = float(selection_row.iloc[0]['points'])
-                    percentage = round((points / limit) * 100, 1)
-                    # Prozentwert immer berechnen, Status aber nur wenn qual_flag True
-                    if qual_flag:
-                        status = "yes" if points >= limit else "no"
-                    else:
-                        status = "no"
-                    national = "yes" if percentage >= 90 else "no"
-                    return status, f"{percentage}%", national
+            # AveragePoints berechnen
+            average_points = None
+            try:
+                points_val = float(points)
+                dives_val = float(dives)
+                average_points = points_val / dives_val if dives_val else None
+            except Exception:
+                average_points = None
 
-                jem_row = relevant_selection[relevant_selection['Competition'] == "JEM"]
-                em_row = relevant_selection[relevant_selection['Competition'] == "EM"]
-                wm_row = relevant_selection[relevant_selection['Competition'] == "WM"]
-                regional_row = relevant_selection[relevant_selection['Competition'] == "Regional"]
+            comp_row = df_comp[df_comp["Name"] == competition_name]
+            comp_row = comp_row.iloc[0] if not comp_row.empty else {}
 
-                jem_qual = bool(comp_row.get("qual-JEM", False))
-                em_qual = bool(comp_row.get("qual-EM", False))
-                wm_qual = bool(comp_row.get("qual-WM", False))
-                regional_qual = bool(comp_row.get("qual-Regional", False))
+            relevant_selection = df_selection[
+                (df_selection['sex'] == sex) &
+                (df_selection['Discipline'] == discipline) &
+                (df_selection['category'] == category)
+            ]
 
-                jem, jem_pct, jem_nt = get_status(jem_row, jem_qual)
-                em, em_pct, em_nt = get_status(em_row, em_qual)
-                wm, wm_pct, wm_nt = get_status(wm_row, wm_qual)
-                regional, regional_pct, regional_nt = get_status(regional_row, regional_qual)
+            jem_row = relevant_selection[relevant_selection['Competition'] == "JEM"]
+            em_row = relevant_selection[relevant_selection['Competition'] == "EM"]
+            wm_row = relevant_selection[relevant_selection['Competition'] == "WM"]
+            regional_row = relevant_selection[relevant_selection['Competition'] == "Regional"]
 
-                nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
+            jem_qual = bool(comp_row.get("qual-JEM", False))
+            em_qual = bool(comp_row.get("qual-EM", False))
+            wm_qual = bool(comp_row.get("qual-WM", False))
+            regional_qual = bool(comp_row.get("qual-Regional", False))
 
-                supabase.table('compresults').update({
-                    "JEM": jem,
-                    "JEM%": safe_numeric(jem_pct),
-                    "EM": em,
-                    "EM%": safe_numeric(em_pct),
-                    "WM": wm,
-                    "WM%": safe_numeric(wm_pct),
-                    "NationalTeam": nationalteam,
-                    "RegionalTeam": regional,
-                    "AveragePoints": average_points,
-                    "timestamp": now_str
-                }).eq("id", comp_id).execute()
-            if len(comp_results) < 1000:
-                break
-            offset += 1000
+            jem, jem_pct, jem_nt = get_status(jem_row, jem_qual, points)
+            em, em_pct, em_nt = get_status(em_row, em_qual, points)
+            wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points)
+            regional, regional_pct, regional_nt = get_status(regional_row, regional_qual, points)
+
+            nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
+
+            supabase.table('compresults').update({
+                "JEM": jem,
+                "JEM%": safe_numeric(jem_pct),
+                "EM": em,
+                "EM%": safe_numeric(em_pct),
+                "WM": wm,
+                "WM%": safe_numeric(wm_pct),
+                "NationalTeam": nationalteam,
+                "RegionalTeam": regional,
+                "AveragePoints": average_points,
+                "timestamp": now_str
+            }).eq("id", comp_id).execute()
         st.success("Neue Einträge wurden berechnet!")
 
-    # Anzeige (liest die Werte direkt aus compresults, alle Zeilen in Blöcken)
-    comp_results = fetch_all_compresults()
+def auswertung_wettkampf():
+    st.header("🏅 Wettkampfauswertungen")
+
+    # Button zur Bewertungsseite
+    if st.button("🔄 Zu Wettkampf-Bewertung"):
+        st.session_state["page"] = "Wettkampf-Bewertung"
+        st.rerun()
+
+    comp_results = fetch_all_rows("compresults")
+    if not comp_results:
+        st.info("Keine Wettkampfergebnisse vorhanden.")
+        return
     df_output = pd.DataFrame(comp_results)
+
     # Filter für die wichtigsten Felder
     with st.expander("🔎 Filter anzeigen"):
         first_name_filter = st.text_input("Vorname (Teilstring möglich)", "")
@@ -3004,6 +2957,8 @@ def main():
         punkte_neuberechnen()
     elif selected == "Wettkampfauswertungen":
         auswertung_wettkampf()
+    elif selected == "Wettkampf-Bewertung":
+        bewertung_wettkampf()
     elif selected == "Wettkampfresultate eingeben":
         manage_compresults_entry()
     elif selected == "Piste RefPoint Analyse":
