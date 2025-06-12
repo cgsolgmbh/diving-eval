@@ -1396,6 +1396,7 @@ def auswertung_wettkampf():
 def manage_compresults_entry():
     st.header("🏅 Wettkampfresultate eingeben")
 
+    # --- Neuen Wettkampf anlegen ---
     if "show_new_comp_form" not in st.session_state:
         st.session_state["show_new_comp_form"] = False
 
@@ -1439,14 +1440,13 @@ def manage_compresults_entry():
                 st.session_state["show_new_comp_form"] = False
         st.stop()
 
-    # Athleten laden
-    athletes = supabase.table('athletes').select('id, first_name, last_name, sex').execute().data
+    # --- Athleten und Wettkämpfe laden ---
+    athletes = fetch_all_rows('athletes', select='id, first_name, last_name, sex')
     athlete_names = {f"{a['first_name']} {a['last_name']}": a for a in athletes}
     selected_athlete = st.selectbox("Athlet", list(athlete_names.keys()))
     athlete_data = athlete_names[selected_athlete] if selected_athlete else None
 
-    # Wettkämpfe laden
-    competitions = supabase.table('competitions').select('Name').execute().data
+    competitions = fetch_all_rows('competitions', select='Name')
     competition_names = [c['Name'] for c in competitions]
     selected_competition = st.selectbox("Wettkampf", competition_names)
 
