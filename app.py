@@ -42,6 +42,64 @@ if "access_token" not in st.session_state:
         # Kein st.rerun() mehr hier!
         # Seite wird ohnehin durch das JavaScript-Snippet neu geladen
         # und der Token ist dann aus der URL verschwunden
+# --- Caching für selten geänderte Tabellen ---
+@st.cache_data
+def get_pistedisciplines():
+    return supabase.table('pistedisciplines').select('id, name').execute().data
+
+@st.cache_data
+def get_athletes():
+    return supabase.table('athletes').select('id, full_name, sex, vintage, category').execute().data
+
+@st.cache_data
+def get_agecategories():
+    return supabase.table('agecategories').select('*').execute().data
+
+@st.cache_data
+def get_scoretables():
+    return supabase.table('scoretables').select('*').execute().data
+
+def fetch_all_rows(table, select="*", **filters):
+    """Lädt alle Zeilen aus einer Supabase-Tabelle in Blöcken von 1000."""
+    all_rows = []
+    offset = 0
+    while True:
+        query = supabase.table(table).select(select).range(offset, offset + 999)
+        for key, value in filters.items():
+            query = query.eq(key, value)
+        rows = query.execute().data
+        if not rows:
+            break
+        all_rows.extend(rows)
+        if len(rows) < 1000:
+            break
+        offset += 1000
+    return all_rows
+
+def get_lookup_dict(data, key, value):
+    return {d[key]: d[value] for d in data}
+
+def get_points(discipline_id, result, category, sex):
+    try:
+        if not discipline_id or not category or not sex:
+            return 0
+        score_rows = supabase.table('scoretables').select('*')\
+            .eq('discipline_id', discipline_id)\
+            .eq('category', category.strip())\
+            .eq('sex', sex.capitalize())\
+            .execute().data
+        score_rows = sorted(score_rows, key=lambda x: float(x['result_min']))
+        for row in score_rows:
+            try:
+                rmin = float(row['result_min'])
+                rmax = float(row['result_max'])
+                if rmin <= float(result) <= rmax:
+                    return row['points']
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return 0
 
 # --- LOGIN-MODUL ---
 if "user" not in st.session_state:
@@ -634,19 +692,14 @@ def edit_athletes():
 def auswertung_starten():
     st.header("📈 Piste Resultate anzeigen")
 
-    # Daten laden
+    # Daten laden (jetzt mit Caching und Utilitys)
     results = fetch_all_rows("pisteresults", select="*")
-    athletes = supabase.table('athletes').select('id, full_name').execute().data
-    disciplines = supabase.table('pistedisciplines').select('id, name').execute().data
-    raw_results = supabase.table('pisteresults').select('athlete_id, discipline_id, raw_result, TestYear').range(0, 9999).execute().data
+    athletes = get_athletes()
+    disciplines = get_pistedisciplines()
 
     # Lookup-Tabellen
-    athlete_lookup = {a['id']: a['full_name'] for a in athletes}
-    discipline_lookup = {d['id']: d['name'] for d in disciplines}
-    raw_result_lookup = {
-        (r['athlete_id'], r['discipline_id'], r['TestYear']): r['raw_result']
-        for r in raw_results
-    }
+    athlete_lookup = get_lookup_dict(athletes, "id", "full_name")
+    discipline_lookup = get_lookup_dict(disciplines, "id", "name")
 
     # Filteroptionen extrahieren
     all_years = sorted(set([r['TestYear'] for r in results if r['TestYear']]), reverse=True)
@@ -658,24 +711,21 @@ def auswertung_starten():
     def dynamic_multiselect(label, options, key):
         default = st.session_state.get(f"{key}_default", ["Alle"])
         selected = st.multiselect(label, ["Alle"] + options, default=default, key=key)
-
         if "Alle" in selected and len(selected) > 1:
             selected = [s for s in selected if s != "Alle"]
             st.session_state[f"{key}_default"] = selected
             st.rerun()
-
         if not selected:
             selected = ["Alle"]
             st.session_state[f"{key}_default"] = selected
             st.rerun()
-
         return selected
 
     # Filter mit automatischem "Alle"-Verhalten
     selected_years = dynamic_multiselect("📅 Testjahr wählen", all_years, "jahr")
     selected_categories = dynamic_multiselect("📂 Kategorie wählen", all_categories, "kategorie")
     selected_sexes = dynamic_multiselect("⚧ Geschlecht wählen", all_sexes, "geschlecht")
-    selected_names = dynamic_multiselect("👤 Name wählen", all_names, "name")  # <--- NEU
+    selected_names = dynamic_multiselect("👤 Name wählen", all_names, "name")
 
     # Daten filtern
     filtered = results
@@ -686,12 +736,10 @@ def auswertung_starten():
     if "Alle" not in selected_sexes:
         filtered = [r for r in filtered if r.get('sex') in selected_sexes]
     if "Alle" not in selected_names:
-        filtered = [r for r in filtered if athlete_lookup.get(r['athlete_id'], "Unbekannt") in selected_names]  # <--- NEU
-
+        filtered = [r for r in filtered if athlete_lookup.get(r['athlete_id'], "Unbekannt") in selected_names]
 
     # Ergebnisstruktur
     results_dict = {}
-
     for entry in filtered:
         athlete_id = entry['athlete_id']
         discipline_id = entry['discipline_id']
@@ -701,7 +749,7 @@ def auswertung_starten():
         sex = entry.get('sex')
         full_name = athlete_lookup.get(athlete_id, "Unbekannt")
         discipline_name = discipline_lookup.get(discipline_id, "Unbekannt")
-        raw_value = raw_result_lookup.get((athlete_id, discipline_id, year), None)
+        raw_value = entry.get('raw_result', None)
 
         key = (athlete_id, year)
         if key not in results_dict:
@@ -715,23 +763,7 @@ def auswertung_starten():
 
         results_dict[key][f"{discipline_name}_Wert"] = raw_value
         results_dict[key][f"{discipline_name}_Punkte"] = points
-        results_dict[key]["Totalpunkte"] += points
-
-        # Punktewert für PisteinPoints aus scoretables holen
-        pisteinpoints_id = None
-        for d in supabase.table('pistedisciplines').select('id, name').execute().data:
-            if d['name'] == "PisteinPoints":
-                pisteinpoints_id = d['id']
-                break
-
-        if pisteinpoints_id:
-            scoretable_row = supabase.table('scoretables').select('*').eq('discipline_id', pisteinpoints_id).execute().data
-            if scoretable_row:
-                piste_value = scoretable_row[0]['points']
-            else:
-                piste_value = None
-        else:
-            piste_value = None
+        results_dict[key]["Totalpunkte"] += points if points not in (None, "", "nan") else 0
 
     # DataFrame erzeugen
     df = pd.DataFrame.from_dict(results_dict, orient='index').reset_index(drop=True)
@@ -747,50 +779,6 @@ def auswertung_starten():
         st.download_button("📥 Excel herunterladen", excel_buffer, file_name="resultate.xlsx")
     except ImportError:
         st.info("📦 Modul 'openpyxl' ist nicht installiert – Excel-Export nicht verfügbar.")
-
-    st.subheader("📊 Analyse pro Disziplin")
-    # Liste der gewünschten Disziplinen
-    disziplinen = [
-        "JumpHeight", "102c", "202c", "302c", "402c", "ABSWallbar",
-        "ShoulderEvel", "ShoulderExt", "PikePosition", "Split",
-        "Handstand", "PullUp", "GlobalCore"
-    ]
-    for disziplin in disziplinen:
-        # Finde alle Spalten, die zu dieser Disziplin gehören
-        wert_col = f"{disziplin}_Wert"
-        punkte_col = f"{disziplin}_Punkte"
-        if wert_col in df.columns:
-            st.markdown(f"#### {disziplin} – Werteverteilung")
-            werte = df[wert_col].dropna()
-            if not werte.empty:
-                fig, ax = plt.subplots()
-                sns.histplot(werte, bins=10, kde=True, ax=ax, color='cornflowerblue')
-                mean_val = werte.mean()
-                ax.axvline(mean_val, color='red', linestyle='--', label=f"Ø {mean_val:.1f}")
-                ax.set_xlabel("Wert")
-                ax.set_ylabel("Anzahl Athleten")
-                ax.set_title(f"{disziplin} – Werteverteilung")
-                ax.legend()
-                st.pyplot(fig)
-            else:
-                st.info(f"Keine Werte für {disziplin} vorhanden.")
-        else:
-            st.info(f"Keine Daten für {disziplin} gefunden.")
-    
-    # 📊 Totalpunkte-Verteilung aller Athleten
-    st.subheader("🎯 Verteilung der Totalpunkte")
-    if not df.empty:
-        fig_total, ax_total = plt.subplots()
-        sns.histplot(df["Totalpunkte"], bins=10, kde=True, ax=ax_total, color='mediumseagreen')
-        mean_total = df["Totalpunkte"].mean()
-        ax_total.axvline(mean_total, color='red', linestyle='--', label=f"Ø Totalpunkte {mean_total:.1f}")
-        ax_total.set_title("Totalpunkte-Verteilung")
-        ax_total.set_xlabel("Totalpunkte")
-        ax_total.set_ylabel("Anzahl Athleten")
-        ax_total.legend()
-        st.pyplot(fig_total)
-    else:
-        st.info("Keine Daten verfügbar für Totalpunkte-Verteilung.")
 
 
 def manage_scoretable():
