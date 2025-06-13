@@ -2488,6 +2488,24 @@ def show_full_piste_results_soc():
         st.info("Keine Daten in socadditionalvalues gefunden.")
         return
 
+    # --- NEU: Piste-Note aus pisteresults holen und in soc_df eintragen ---
+    pistedisciplines = get_pistedisciplines()
+    pistetotalinpoints_id = next((d['id'] for d in pistedisciplines if d['name'] == "PisteTotalinPoints"), None)
+    pisteresults = fetch_all_rows("pisteresults", select="*")
+    # Index für schnellen Zugriff
+    piste_lookup = {}
+    for r in pisteresults:
+        key = (r.get("athlete_id"), str(r.get("TestYear")))
+        if r.get("discipline_id") == pistetotalinpoints_id:
+            piste_lookup[key] = r.get("points", "")
+
+    # Füge die Note in die Spalte 'piste' ein
+    for idx, row in soc_df.iterrows():
+        athlete_id = row.get("athlete_id")
+        year = str(row.get("PisteYear"))
+        piste_note = piste_lookup.get((athlete_id, year), "")
+        soc_df.at[idx, "piste"] = piste_note
+
     # Nur gewünschte Spalten anzeigen (inkl. CompPointsNationalTeam und talentcard)
     show_cols = [
         "first_name", "last_name", "Category", "sex", "PisteYear",
@@ -2495,7 +2513,6 @@ def show_full_piste_results_soc():
         "resilience", "trainingtime", "trainingsince", "toolenvironment",
         "quality", "totalpoints", "pisteminregio", "pisteminnational", "CompPointsNationalTeam", "talentcard"
     ]
-    # Füge fehlende Spalten als leere Spalten hinzu (für robustes Verhalten)
     for col in show_cols:
         if col not in soc_df.columns:
             soc_df[col] = None
@@ -2514,11 +2531,9 @@ def show_full_piste_results_soc():
     sex = st.selectbox("Geschlecht", ["Alle"] + sexes)
     categories = sorted(soc_df["Category"].dropna().unique())
     category = st.multiselect("Kategorie", categories, default=categories)
-    # NEU: Filter für talentcard
     talentcard_values = ["Alle"] + sorted([v for v in soc_df["talentcard"].dropna().unique() if v != ""])
     talentcard_filter = st.selectbox("Talentcard", talentcard_values)
 
-    # Anwenden der Filter
     filtered = soc_df[
         soc_df["PisteYear"].astype(str).isin([str(y) for y in year]) &
         (soc_df["first_name"].str.lower().str.strip() == first_name.lower().strip() if first_name != "Alle" else True) &
