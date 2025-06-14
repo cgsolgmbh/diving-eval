@@ -2488,6 +2488,40 @@ def show_full_piste_results_soc():
         st.info("Keine Daten in socadditionalvalues gefunden.")
         return
 
+    # --- NEU: Piste-Note korrekt berechnen ---
+    pistedisciplines = get_pistedisciplines()
+    pistepointsdurchschnitt_id = next((d['id'] for d in pistedisciplines if d['name'].strip().lower() == "pistepointsdurchschnitt"), None)
+    pistetotalinpoints_id = next((d['id'] for d in pistedisciplines if d['name'] == "PisteTotalinPoints"), None)
+    scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
+    pisteresults = fetch_all_rows("pisteresults", select="*")
+
+    for idx, row in soc_df.iterrows():
+        athlete_id = row.get("athlete_id")
+        year = row.get("PisteYear")
+        # Wert aus PistePointsDurchschnitt holen
+        avg_result_row = next(
+            (r for r in pisteresults
+            if r.get("athlete_id") == athlete_id
+            and r.get("TestYear") == year
+            and r.get("discipline_id") == pistepointsdurchschnitt_id),
+            None
+        )
+        avg_points = avg_result_row.get("raw_result") if avg_result_row else None
+
+        # Bewertung holen
+        piste_note = ""
+        if avg_points is not None:
+            for s in scoretable_rows:
+                try:
+                    rmin = float(s['result_min'])
+                    rmax = float(s['result_max'])
+                    if rmin <= avg_points <= rmax:
+                        piste_note = s['points']
+                        break
+                except Exception:
+                    continue
+        soc_df.at[idx, "piste"] = piste_note
+
     # --- NEU: Piste-Note aus pisteresults holen und in soc_df eintragen ---
     pistedisciplines = get_pistedisciplines()
     pistetotalinpoints_id = next((d['id'] for d in pistedisciplines if d['name'] == "PisteTotalinPoints"), None)
