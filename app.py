@@ -2320,7 +2320,7 @@ def soc_full_calculation():
                     except Exception:
                         continue
             athlete_data_map[key]["piste"] = piste_value
-
+            st.write(f"{athlete['first_name']} {athlete['last_name']} ({pisteyear}): PistePointsDurchschnitt={avg_points}, Note={piste_value}")
             # compenhancement
             performance = row.get('performance')
             if performance not in (None, "", "nan"):
