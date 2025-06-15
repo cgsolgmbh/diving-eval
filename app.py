@@ -2295,26 +2295,31 @@ def soc_full_calculation():
                     pass
                 athlete_data_map[key]["competitions"] = note
 
-            # piste
+            # --- Piste: Bewertung des Durchschnitts (PistePointsDurchschnitt) mit Scoretabelle von PisteTotalinPoints ---
+            pistepointsdurchschnitt_id = next((d['id'] for d in pistedisciplines if d['name'].strip().lower() == "pistepointsdurchschnitt"), None)
+            pistetotalinpoints_id = next((d['id'] for d in pistedisciplines if d['name'] == "PisteTotalinPoints"), None)
+            scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
+
             piste_value = None
+            # Hole den Durchschnittswert aus pisteresults (Disziplin PistePointsDurchschnitt)
             piste_result = piste_results_df[
                 (piste_results_df['athlete_id'] == athlete['id']) &
-                (piste_results_df['discipline_id'] == pistetotalinpoints_id) &
+                (piste_results_df['discipline_id'] == pistepointsdurchschnitt_id) &
                 (piste_results_df['TestYear'] == pisteyear)
             ]
             if not piste_result.empty:
-                totalpunkte = piste_result.iloc[0]['points']
-                scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
+                avg_points = piste_result.iloc[0]['raw_result']
+                # Bewertung holen
                 for row_score in scoretable_rows:
                     try:
                         rmin = float(row_score['result_min'])
                         rmax = float(row_score['result_max'])
-                        if rmin <= totalpunkte <= rmax:
+                        if rmin <= avg_points <= rmax:
                             piste_value = row_score['points']
                             break
                     except Exception:
                         continue
-                athlete_data_map[key]["piste"] = piste_value
+            athlete_data_map[key]["piste"] = piste_value
 
             # compenhancement
             performance = row.get('performance')
