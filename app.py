@@ -2303,10 +2303,12 @@ def soc_full_calculation():
             # piste
             # Debug-Ausgaben für Filter
             st.write(f"athlete['id']: {athlete['id']} ({type(athlete['id'])})")
-            st.write("pistepointsdurchschnitt_id:", pistepointsdurchschnitt_id, type(pistepointsdurchschnitt_id))
-            st.write("pisteyear:", pisteyear, type(pisteyear))
-            st.write("piste_results_df.dtypes:", piste_results_df.dtypes)
-            st.write("piste_results_df.head():", piste_results_df.head(10))
+            st.write(f"pistepointsdurchschnitt_id: {pistepointsdurchschnitt_id} ({type(pistepointsdurchschnitt_id)})")
+            st.write(f"pisteyear: {pisteyear} ({type(pisteyear)})")
+            st.write("piste_results_df.dtypes:")
+            st.write(piste_results_df.dtypes)
+            st.write("piste_results_df.head(10):")
+            st.write(piste_results_df.head(10))
 
             # --- Piste-Berechnung ---
             piste_value = None  # <-- Initialisierung!
