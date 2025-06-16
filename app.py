@@ -2308,7 +2308,8 @@ def soc_full_calculation():
                 (piste_results_df['TestYear'] == pisteyear)
             ]
             if not piste_result.empty:
-                avg_points = piste_result.iloc[0]['raw_result']
+                st.write("Spalten in piste_result:", piste_result.columns.tolist())
+                avg_points = piste_result.iloc[0]['points']  # oder 'raw_result', je nach tatsächlichem Namen
                 avg_points_rounded = round(float(avg_points), 1)
                 st.write(f"{athlete['first_name']} {athlete['last_name']} ({pisteyear}): avg_points={avg_points}, avg_points_rounded={avg_points_rounded}")
                 for row_score in scoretable_rows:
