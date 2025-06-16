@@ -2301,31 +2301,43 @@ def soc_full_calculation():
             scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
 
             # piste
-            # Debug-Ausgaben für Filter
-            st.write(f"athlete['id']: {athlete['id']} ({type(athlete['id'])})")
-            st.write(f"pistepointsdurchschnitt_id: {pistepointsdurchschnitt_id} ({type(pistepointsdurchschnitt_id)})")
-            st.write(f"pisteyear: {pisteyear} ({type(pisteyear)})")
-            st.write("piste_results_df.dtypes:")
-            st.write(piste_results_df.dtypes)
-            st.write("piste_results_df.head(10):")
-            st.write(piste_results_df.head(10))
-
-            # piste: Bewertung des Durchschnitts (PistePointsDurchschnitt) mit Scoretabelle von PisteTotalinPoints
+            # --- IDs der Disziplinen holen ---
             pistepointsdurchschnitt_id = next((d['id'] for d in pistedisciplines if d['name'].strip().lower() == "pistepointsdurchschnitt"), None)
             pistetotalinpoints_id = next((d['id'] for d in pistedisciplines if d['name'] == "PisteTotalinPoints"), None)
             scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
 
+            # --- Wert aus raw_result nach points übertragen (nur für PistePointsDurchschnitt) ---
             piste_result = piste_results_df[
                 (piste_results_df['athlete_id'].astype(str) == str(athlete['id'])) &
                 (piste_results_df['discipline_id'].astype(str) == str(pistepointsdurchschnitt_id)) &
                 (piste_results_df['TestYear'].astype(int) == int(pisteyear))
             ]
+            if not piste_result.empty:
+                raw_val = piste_result.iloc[0].get('raw_result')
+                if raw_val is not None:
+                    # Update points in DB
+                    supabase.table("pisteresults").update({"points": raw_val})\
+                        .eq("athlete_id", athlete['id'])\
+                        .eq("discipline_id", pistepointsdurchschnitt_id)\
+                        .eq("TestYear", pisteyear).execute()
+                    # Optional: auch im DataFrame aktualisieren
+                    piste_results_df.loc[
+                        (piste_results_df['athlete_id'].astype(str) == str(athlete['id'])) &
+                        (piste_results_df['discipline_id'].astype(str) == str(pistepointsdurchschnitt_id)) &
+                        (piste_results_df['TestYear'].astype(int) == int(pisteyear)),
+                        'points'
+                    ] = raw_val
 
+            # --- piste: Bewertung des Durchschnitts (PistePointsDurchschnitt) mit Scoretabelle von PisteTotalinPoints ---
+            # Jetzt wie gehabt den Wert aus points holen:
+            piste_result = piste_results_df[
+                (piste_results_df['athlete_id'].astype(str) == str(athlete['id'])) &
+                (piste_results_df['discipline_id'].astype(str) == str(pistepointsdurchschnitt_id)) &
+                (piste_results_df['TestYear'].astype(int) == int(pisteyear))
+            ]
             piste_value = None
             if not piste_result.empty:
-                st.write("Spalten in piste_result:", piste_result.columns.tolist())
-                st.write("piste_result.iloc[0]:", piste_result.iloc[0])
-                avg_points = piste_result.iloc[0]['points']  # Durchschnittswert!
+                avg_points = piste_result.iloc[0]['points']  # jetzt steht der Wert sicher in points!
                 avg_points_rounded = round(float(avg_points), 1)
                 for row_score in scoretable_rows:
                     try:
