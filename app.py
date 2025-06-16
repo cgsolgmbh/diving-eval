@@ -2320,7 +2320,8 @@ def soc_full_calculation():
             ]
             st.write("Gefundene Zeilen für diesen Athleten:", piste_result)
             if not piste_result.empty:
-                avg_points = piste_result.iloc[0]['points']  # oder 'raw_result', je nach Spaltenname
+                st.write("piste_result.iloc[0]:", piste_result.iloc[0])
+                avg_points = piste_result.iloc[0]['raw_result']  # oder 'points', je nachdem wo der Wert steht
                 st.write("avg_points:", avg_points)
                 avg_points_rounded = round(float(avg_points), 1)
                 st.write(f"{athlete['first_name']} {athlete['last_name']} ({pisteyear}): avg_points={avg_points}, avg_points_rounded={avg_points_rounded}")
