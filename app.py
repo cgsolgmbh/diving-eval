@@ -2301,15 +2301,23 @@ def soc_full_calculation():
             scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
 
             # piste
-            piste_value = None
+            # Debug-Ausgaben für Filter
+            st.write("athlete['id']:", athlete['id'], type(athlete['id']))
+            st.write("pistepointsdurchschnitt_id:", pistepointsdurchschnitt_id, type(pistepointsdurchschnitt_id))
+            st.write("pisteyear:", pisteyear, type(pisteyear))
+            st.write("piste_results_df.dtypes:", piste_results_df.dtypes)
+            st.write("piste_results_df.head():", piste_results_df.head(10))
+
+            # Filter mit expliziter Typanpassung
             piste_result = piste_results_df[
-                (piste_results_df['athlete_id'] == athlete['id']) &
-                (piste_results_df['discipline_id'] == pistepointsdurchschnitt_id) &
-                (piste_results_df['TestYear'] == pisteyear)
+                (piste_results_df['athlete_id'].astype(str) == str(athlete['id'])) &
+                (piste_results_df['discipline_id'].astype(str) == str(pistepointsdurchschnitt_id)) &
+                (piste_results_df['TestYear'].astype(int) == int(pisteyear))
             ]
+            st.write("Gefundene Zeilen für diesen Athleten:", piste_result)
             if not piste_result.empty:
-                st.write("Spalten in piste_result:", piste_result.columns.tolist())
-                avg_points = piste_result.iloc[0]['points']  # oder 'raw_result', je nach tatsächlichem Namen
+                avg_points = piste_result.iloc[0]['points']  # oder 'raw_result', je nach Spaltenname
+                st.write("avg_points:", avg_points)
                 avg_points_rounded = round(float(avg_points), 1)
                 st.write(f"{athlete['first_name']} {athlete['last_name']} ({pisteyear}): avg_points={avg_points}, avg_points_rounded={avg_points_rounded}")
                 for row_score in scoretable_rows:
@@ -2325,7 +2333,7 @@ def soc_full_calculation():
                         st.write(f"Fehler beim Vergleich: {e}")
                         continue
             else:
-                st.write(f"{athlete['first_name']} {athlete['last_name']} ({pisteyear}): Kein PistePointsDurchschnitt gefunden!")
+                st.write("Kein Eintrag für diesen Athleten/Jahr/Disziplin gefunden!")
             athlete_data_map[key]["piste"] = piste_value
 
             # compenhancement
