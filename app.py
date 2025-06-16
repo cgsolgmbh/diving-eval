@@ -2308,6 +2308,8 @@ def soc_full_calculation():
             st.write("piste_results_df.dtypes:", piste_results_df.dtypes)
             st.write("piste_results_df.head():", piste_results_df.head(10))
 
+            # --- Piste-Berechnung ---
+            piste_value = None  # <-- Initialisierung!
             # Filter mit expliziter Typanpassung
             piste_result = piste_results_df[
                 (piste_results_df['athlete_id'].astype(str) == str(athlete['id'])) &
