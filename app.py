@@ -2320,7 +2320,7 @@ def soc_full_calculation():
             ]
             st.write("piste_result:", piste_result)
             if not piste_result.empty:
-                raw_val = piste_result.iloc[0].get('raw_result')
+                raw_val = piste_result.iloc[0]['points']
                 st.write("raw_val:", raw_val)
                 if raw_val is not None:
                     # Update points in DB
