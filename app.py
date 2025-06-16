@@ -2521,58 +2521,6 @@ def show_full_piste_results_soc():
         st.info("Keine Daten in socadditionalvalues gefunden.")
         return
 
-    # --- NEU: Piste-Note korrekt berechnen ---
-    pistedisciplines = get_pistedisciplines()
-    pistepointsdurchschnitt_id = next((d['id'] for d in pistedisciplines if d['name'].strip().lower() == "pistepointsdurchschnitt"), None)
-    pistetotalinpoints_id = next((d['id'] for d in pistedisciplines if d['name'] == "PisteTotalinPoints"), None)
-    scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
-    pisteresults = fetch_all_rows("pisteresults", select="*")
-
-    for idx, row in soc_df.iterrows():
-        athlete_id = row.get("athlete_id")
-        year = row.get("PisteYear")
-        # Wert aus PistePointsDurchschnitt holen
-        avg_result_row = next(
-            (r for r in pisteresults
-            if r.get("athlete_id") == athlete_id
-            and r.get("TestYear") == year
-            and r.get("discipline_id") == pistepointsdurchschnitt_id),
-            None
-        )
-        avg_points = avg_result_row.get("raw_result") if avg_result_row else None
-
-        # Bewertung holen
-        piste_note = ""
-        if avg_points is not None:
-            for s in scoretable_rows:
-                try:
-                    rmin = float(s['result_min'])
-                    rmax = float(s['result_max'])
-                    if rmin <= avg_points <= rmax:
-                        piste_note = s['points']
-                        break
-                except Exception:
-                    continue
-        soc_df.at[idx, "piste"] = piste_note
-
-    # --- NEU: Piste-Note aus pisteresults holen und in soc_df eintragen ---
-    pistedisciplines = get_pistedisciplines()
-    pistetotalinpoints_id = next((d['id'] for d in pistedisciplines if d['name'] == "PisteTotalinPoints"), None)
-    pisteresults = fetch_all_rows("pisteresults", select="*")
-    # Index für schnellen Zugriff
-    piste_lookup = {}
-    for r in pisteresults:
-        key = (r.get("athlete_id"), str(r.get("TestYear")))
-        if r.get("discipline_id") == pistetotalinpoints_id:
-            piste_lookup[key] = r.get("points", "")
-
-    # Füge die Note in die Spalte 'piste' ein
-    for idx, row in soc_df.iterrows():
-        athlete_id = row.get("athlete_id")
-        year = str(row.get("PisteYear"))
-        piste_note = piste_lookup.get((athlete_id, year), "")
-        soc_df.at[idx, "piste"] = piste_note
-
     # Nur gewünschte Spalten anzeigen (inkl. CompPointsNationalTeam und talentcard)
     show_cols = [
         "first_name", "last_name", "Category", "sex", "PisteYear",
@@ -2580,10 +2528,14 @@ def show_full_piste_results_soc():
         "resilience", "trainingtime", "trainingsince", "toolenvironment",
         "quality", "totalpoints", "pisteminregio", "pisteminnational", "CompPointsNationalTeam", "talentcard"
     ]
+    # Füge fehlende Spalten als leere Spalten hinzu (für robustes Verhalten)
     for col in show_cols:
         if col not in soc_df.columns:
             soc_df[col] = None
     soc_df = soc_df[show_cols]
+
+    # Debug: Zeige die ersten Zeilen mit piste
+    st.write("soc_df[['first_name','last_name','PisteYear','piste']].head(10):", soc_df[['first_name','last_name','PisteYear','piste']].head(10))
 
     # Filter
     st.subheader("🔎 Filter")
@@ -2601,6 +2553,7 @@ def show_full_piste_results_soc():
     talentcard_values = ["Alle"] + sorted([v for v in soc_df["talentcard"].dropna().unique() if v != ""])
     talentcard_filter = st.selectbox("Talentcard", talentcard_values)
 
+    # Anwenden der Filter
     filtered = soc_df[
         soc_df["PisteYear"].astype(str).isin([str(y) for y in year]) &
         (soc_df["first_name"].str.lower().str.strip() == first_name.lower().strip() if first_name != "Alle" else True) &
