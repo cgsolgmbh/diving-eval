@@ -2318,17 +2318,13 @@ def soc_full_calculation():
                 (piste_results_df['discipline_id'].astype(str) == str(pistepointsdurchschnitt_id)) &
                 (piste_results_df['TestYear'].astype(str) == str(pisteyear))
             ]
-            st.write("piste_result:", piste_result)
             if not piste_result.empty:
-                raw_val = piste_result.iloc[0]['points']
-                st.write("raw_val:", raw_val)
+                raw_val = piste_result.iloc[0]['raw_result']
                 if raw_val is not None:
-                    # Update points in DB
-                    result = supabase.table("pisteresults").update({"points": raw_val})\
+                    supabase.table("pisteresults").update({"points": raw_val})\
                         .eq("athlete_id", athlete['id'])\
                         .eq("discipline_id", pistepointsdurchschnitt_id)\
                         .eq("TestYear", pisteyear).execute()
-                    st.write("Update-Result:", result)
                     # Optional: auch im DataFrame aktualisieren
                     piste_results_df.loc[
                         (piste_results_df['athlete_id'].astype(str) == str(athlete['id'])) &
