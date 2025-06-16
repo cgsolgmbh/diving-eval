@@ -2325,7 +2325,7 @@ def soc_full_calculation():
             if not piste_result.empty:
                 st.write("Spalten in piste_result:", piste_result.columns.tolist())
                 st.write("piste_result.iloc[0]:", piste_result.iloc[0])
-                avg_points = piste_result.iloc[0]['raw_result']  # Durchschnittswert!
+                avg_points = piste_result.iloc[0]['points']  # Durchschnittswert!
                 avg_points_rounded = round(float(avg_points), 1)
                 for row_score in scoretable_rows:
                     try:
