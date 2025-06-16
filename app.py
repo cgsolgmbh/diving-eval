@@ -2320,6 +2320,7 @@ def soc_full_calculation():
                 (piste_results_df['discipline_id'].astype(str) == str(pistepointsdurchschnitt_id)) &
                 (piste_results_df['TestYear'].astype(int) == int(pisteyear))
             ]
+
             piste_value = None
             if not piste_result.empty:
                 avg_points = piste_result.iloc[0]['raw_result']  # Durchschnittswert!
