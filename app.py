@@ -2300,8 +2300,8 @@ def soc_full_calculation():
             pistetotalinpoints_id = next((d['id'] for d in pistedisciplines if d['name'] == "PisteTotalinPoints"), None)
             scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
 
+            # piste
             piste_value = None
-            # Hole den Durchschnittswert aus pisteresults (Disziplin PistePointsDurchschnitt)
             piste_result = piste_results_df[
                 (piste_results_df['athlete_id'] == athlete['id']) &
                 (piste_results_df['discipline_id'] == pistepointsdurchschnitt_id) &
@@ -2309,16 +2309,22 @@ def soc_full_calculation():
             ]
             if not piste_result.empty:
                 avg_points = piste_result.iloc[0]['raw_result']
-                # Bewertung holen
+                avg_points_rounded = round(float(avg_points), 1)
+                st.write(f"{athlete['first_name']} {athlete['last_name']} ({pisteyear}): avg_points={avg_points}, avg_points_rounded={avg_points_rounded}")
                 for row_score in scoretable_rows:
                     try:
                         rmin = float(row_score['result_min'])
                         rmax = float(row_score['result_max'])
-                        if rmin <= avg_points <= rmax:
+                        st.write(f"Vergleich: {rmin} <= {avg_points_rounded} <= {rmax}")
+                        if rmin <= avg_points_rounded <= rmax:
                             piste_value = row_score['points']
+                            st.write(f"Treffer! piste_value={piste_value}")
                             break
-                    except Exception:
+                    except Exception as e:
+                        st.write(f"Fehler beim Vergleich: {e}")
                         continue
+            else:
+                st.write(f"{athlete['first_name']} {athlete['last_name']} ({pisteyear}): Kein PistePointsDurchschnitt gefunden!")
             athlete_data_map[key]["piste"] = piste_value
 
             # compenhancement
