@@ -2307,6 +2307,8 @@ def soc_full_calculation():
             scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
 
             # --- Wert aus raw_result nach points übertragen (nur für PistePointsDurchschnitt) ---
+            st.write("Spalten in piste_results_df:", piste_results_df.columns.tolist())
+            st.write("piste_results_df.head(10):", piste_results_df.head(10))
             st.write("athlete['id']:", athlete['id'])
             st.write("pistepointsdurchschnitt_id:", pistepointsdurchschnitt_id)
             st.write("pisteyear:", pisteyear)
