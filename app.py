@@ -2307,8 +2307,8 @@ def soc_full_calculation():
             scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
 
             # --- Wert aus raw_result nach points übertragen (nur für PistePointsDurchschnitt) ---
-            st.write("Spalten in piste_results_df:", piste_results_df.columns.tolist())
-            st.write("piste_results_df.head(10):", piste_results_df.head(10))
+        st.write("Spalten in piste_results_df:", piste_results_df.columns.tolist())
+        st.write("piste_results_df.head(10):", piste_results_df.head(10))
             st.write("athlete['id']:", athlete['id'])
             st.write("pistepointsdurchschnitt_id:", pistepointsdurchschnitt_id)
             st.write("pisteyear:", pisteyear)
@@ -2320,7 +2320,7 @@ def soc_full_calculation():
             ]
             st.write("piste_result:", piste_result)
             if not piste_result.empty:
-                raw_val = piste_result.iloc[0]['points']
+                raw_val = piste_result.iloc[0].get('raw_result')
                 st.write("raw_val:", raw_val)
                 if raw_val is not None:
                     # Update points in DB
@@ -2346,7 +2346,7 @@ def soc_full_calculation():
             ]
             piste_value = None
             if not piste_result.empty:
-                avg_points = piste_result.iloc[0]['points']  # jetzt steht der Wert sicher in points!
+                avg_points = piste_result.iloc[0]['raw_result']  # jetzt steht der Wert sicher in points!
                 avg_points_rounded = round(float(avg_points), 1)
                 for row_score in scoretable_rows:
                     try:
