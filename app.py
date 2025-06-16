@@ -2302,11 +2302,17 @@ def soc_full_calculation():
 
             # piste
             piste_value = None
+            st.write("athlete['id']:", athlete['id'], type(athlete['id']))
+            st.write("pistepointsdurchschnitt_id:", pistepointsdurchschnitt_id, type(pistepointsdurchschnitt_id))
+            st.write("pisteyear:", pisteyear, type(pisteyear))
+            st.write("piste_results_df.dtypes:", piste_results_df.dtypes)
+            st.write("piste_results_df.head():", piste_results_df.head(10))
             piste_result = piste_results_df[
                 (piste_results_df['athlete_id'] == athlete['id']) &
                 (piste_results_df['discipline_id'] == pistepointsdurchschnitt_id) &
                 (piste_results_df['TestYear'] == pisteyear)
             ]
+            st.write("Gefundene Zeilen für diesen Athleten:", piste_result)
             if not piste_result.empty:
                 st.write("Spalten in piste_result:", piste_result.columns.tolist())
                 avg_points = piste_result.iloc[0]['points']  # oder 'raw_result', je nach tatsächlichem Namen
