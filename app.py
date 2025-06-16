@@ -2315,7 +2315,7 @@ def soc_full_calculation():
             piste_result = piste_results_df[
                 (piste_results_df['athlete_id'].astype(str) == str(athlete['id'])) &
                 (piste_results_df['discipline_id'].astype(str) == str(pistepointsdurchschnitt_id)) &
-                (piste_results_df['TestYear'].astype(int) == int(pisteyear))
+                (piste_results_df['TestYear'].astype(str) == str(pisteyear))
             ]
             if not piste_result.empty:
                 raw_val = piste_result.iloc[0].get('raw_result')
