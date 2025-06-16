@@ -2310,35 +2310,29 @@ def soc_full_calculation():
             st.write("piste_results_df.head(10):")
             st.write(piste_results_df.head(10))
 
-            # --- Piste-Berechnung ---
-            piste_value = None  # <-- Initialisierung!
-            # Filter mit expliziter Typanpassung
+            # piste: Bewertung des Durchschnitts (PistePointsDurchschnitt) mit Scoretabelle von PisteTotalinPoints
+            pistepointsdurchschnitt_id = next((d['id'] for d in pistedisciplines if d['name'].strip().lower() == "pistepointsdurchschnitt"), None)
+            pistetotalinpoints_id = next((d['id'] for d in pistedisciplines if d['name'] == "PisteTotalinPoints"), None)
+            scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
+
             piste_result = piste_results_df[
                 (piste_results_df['athlete_id'].astype(str) == str(athlete['id'])) &
                 (piste_results_df['discipline_id'].astype(str) == str(pistepointsdurchschnitt_id)) &
                 (piste_results_df['TestYear'].astype(int) == int(pisteyear))
             ]
-            st.write("Gefundene Zeilen für diesen Athleten:", piste_result)
+            piste_value = None
             if not piste_result.empty:
-                st.write("piste_result.iloc[0]:", piste_result.iloc[0])
-                avg_points = piste_result.iloc[0]['raw_result']
-                st.write("avg_points:", avg_points)
+                avg_points = piste_result.iloc[0]['raw_result']  # Durchschnittswert!
                 avg_points_rounded = round(float(avg_points), 1)
-                st.write(f"{athlete['first_name']} {athlete['last_name']} ({pisteyear}): avg_points={avg_points}, avg_points_rounded={avg_points_rounded}")
                 for row_score in scoretable_rows:
                     try:
                         rmin = float(row_score['result_min'])
                         rmax = float(row_score['result_max'])
-                        st.write(f"Vergleich: {rmin} <= {avg_points_rounded} <= {rmax}")
                         if rmin <= avg_points_rounded <= rmax:
                             piste_value = row_score['points']
-                            st.write(f"Treffer! piste_value={piste_value}")
                             break
-                    except Exception as e:
-                        st.write(f"Fehler beim Vergleich: {e}")
+                    except Exception:
                         continue
-            else:
-                st.write("Kein Eintrag für diesen Athleten/Jahr/Disziplin gefunden!")
             athlete_data_map[key]["piste"] = piste_value
 
             # compenhancement
