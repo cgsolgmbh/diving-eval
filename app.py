@@ -2221,7 +2221,7 @@ def soc_full_calculation():
         scoretables_enhance = fetch_all_rows('scoretables', select='*', discipline_id=comp_enhance_id)
 
         # Piste-Resultate laden
-        piste_results = fetch_all_rows("pisteresults", select="athlete_id, discipline_id, points, TestYear")
+        piste_results = fetch_all_rows("pisteresults", select="athlete_id, discipline_id, points, raw_result, TestYear")
         piste_results_df = pd.DataFrame(piste_results)
 
         # Bestehende socadditionalvalues laden (für Update/Insert)
@@ -2307,12 +2307,6 @@ def soc_full_calculation():
             scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
 
             # --- Wert aus raw_result nach points übertragen (nur für PistePointsDurchschnitt) ---
-            st.write("Spalten in piste_results_df:", piste_results_df.columns.tolist())
-            st.write("piste_results_df.head(10):", piste_results_df.head(10))
-            st.write("athlete['id']:", athlete['id'])
-            st.write("pistepointsdurchschnitt_id:", pistepointsdurchschnitt_id)
-            st.write("pisteyear:", pisteyear)
-            st.write("piste_results_df[['athlete_id','discipline_id','TestYear','raw_result','points']].head(10):", piste_results_df[['athlete_id','discipline_id','TestYear','raw_result','points']].head(10))
             piste_result = piste_results_df[
                 (piste_results_df['athlete_id'].astype(str) == str(athlete['id'])) &
                 (piste_results_df['discipline_id'].astype(str) == str(pistepointsdurchschnitt_id)) &
