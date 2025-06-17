@@ -3037,7 +3037,7 @@ def referenztabellen_anzeigen():
 
 def show_top3_competitions(top3_df):
     st.header("🏆 Top 3 Wettkämpfe pro Athlet und Jahr")
-
+    st.write("Spalten in top3_df:", top3_df.columns.tolist())
     if top3_df is None or top3_df.empty:
         st.info("Keine Top-3-Wettkampf-Daten vorhanden.")
         return
