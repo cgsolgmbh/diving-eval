@@ -3035,52 +3035,34 @@ def referenztabellen_anzeigen():
     else:
         st.info("Disziplin 'PisteTotalinPoints' nicht gefunden.")
 
-def show_top3_competitions():
+def show_top3_competitions(top3_df):
     st.header("🏆 Top 3 Wettkämpfe pro Athlet und Jahr")
 
-    # Daten laden (passe die Spaltennamen ggf. an deine Struktur an)
-    comp_df = pd.DataFrame(fetch_all_rows("pisterefcompresults", select="*"))
-    if comp_df.empty:
-        st.info("Keine Daten in pisterefcompresults gefunden.")
+    if top3_df is None or top3_df.empty:
+        st.info("Keine Top-3-Wettkampf-Daten vorhanden.")
         return
 
-    # Optional: Athletennamen ergänzen, falls nur IDs vorhanden sind
-    if "athlete_id" in comp_df.columns and ("first_name" not in comp_df.columns or "last_name" not in comp_df.columns):
-        athletes = pd.DataFrame(fetch_all_rows("athletes", select="id,first_name,last_name"))
-        comp_df = comp_df.merge(athletes, left_on="athlete_id", right_on="id", how="left")
-
     # Filter nach Jahr und Name
-    years = sorted(comp_df["TestYear"].dropna().unique())
+    years = sorted(top3_df["Jahr"].dropna().unique())
     year = st.selectbox("Jahr", years)
-    names = sorted(comp_df["last_name"].dropna().unique())
+    names = sorted(top3_df["Nachname"].dropna().unique())
     name = st.selectbox("Nachname", ["Alle"] + names)
 
-    # Anwenden der Filter
-    filtered = comp_df[comp_df["TestYear"] == year]
+    filtered = top3_df[top3_df["Jahr"] == year]
     if name != "Alle":
-        filtered = filtered[filtered["last_name"] == name]
+        filtered = filtered[filtered["Nachname"] == name]
 
-    # Top 3 Wettkämpfe pro Athlet und Jahr
-    # Annahme: Spalten "athlete_id", "first_name", "last_name", "TestYear", "competition", "points"
-    top3 = (
-        filtered
-        .sort_values(["athlete_id", "TestYear", "points"], ascending=[True, True, False])
-        .groupby(["athlete_id", "TestYear"])
-        .head(3)
-        .sort_values(["last_name", "first_name", "TestYear", "points"], ascending=[True, True, True, False])
-    )
-
-    show_cols = ["first_name", "last_name", "TestYear", "competition", "points"]
+    show_cols = ["Vorname", "Nachname", "Jahr", "Wettkampf", "Punkte"]
     for col in show_cols:
-        if col not in top3.columns:
-            top3[col] = None
-    top3 = top3[show_cols]
+        if col not in filtered.columns:
+            filtered[col] = None
+    filtered = filtered[show_cols]
 
-    st.dataframe(top3)
+    st.dataframe(filtered)
     st.download_button(
         "📥 Top 3 Wettkämpfe als CSV",
-        top3.to_csv(index=False, encoding='utf-8-sig'),
-        file_name="top3_competitions.csv",
+        filtered.to_csv(index=False, encoding='utf-8-sig'),
+        file_name="top3_wettkaempfe.csv",
         mime="text/csv"
     )
 
