@@ -3035,6 +3035,55 @@ def referenztabellen_anzeigen():
     else:
         st.info("Disziplin 'PisteTotalinPoints' nicht gefunden.")
 
+def show_top3_competitions():
+    st.header("🏆 Top 3 Wettkämpfe pro Athlet und Jahr")
+
+    # Daten laden (passe die Spaltennamen ggf. an deine Struktur an)
+    comp_df = pd.DataFrame(fetch_all_rows("pisterefcompresults", select="*"))
+    if comp_df.empty:
+        st.info("Keine Daten in pisterefcompresults gefunden.")
+        return
+
+    # Optional: Athletennamen ergänzen, falls nur IDs vorhanden sind
+    if "athlete_id" in comp_df.columns and ("first_name" not in comp_df.columns or "last_name" not in comp_df.columns):
+        athletes = pd.DataFrame(fetch_all_rows("athletes", select="id,first_name,last_name"))
+        comp_df = comp_df.merge(athletes, left_on="athlete_id", right_on="id", how="left")
+
+    # Filter nach Jahr und Name
+    years = sorted(comp_df["TestYear"].dropna().unique())
+    year = st.selectbox("Jahr", years)
+    names = sorted(comp_df["last_name"].dropna().unique())
+    name = st.selectbox("Nachname", ["Alle"] + names)
+
+    # Anwenden der Filter
+    filtered = comp_df[comp_df["TestYear"] == year]
+    if name != "Alle":
+        filtered = filtered[filtered["last_name"] == name]
+
+    # Top 3 Wettkämpfe pro Athlet und Jahr
+    # Annahme: Spalten "athlete_id", "first_name", "last_name", "TestYear", "competition", "points"
+    top3 = (
+        filtered
+        .sort_values(["athlete_id", "TestYear", "points"], ascending=[True, True, False])
+        .groupby(["athlete_id", "TestYear"])
+        .head(3)
+        .sort_values(["last_name", "first_name", "TestYear", "points"], ascending=[True, True, True, False])
+    )
+
+    show_cols = ["first_name", "last_name", "TestYear", "competition", "points"]
+    for col in show_cols:
+        if col not in top3.columns:
+            top3[col] = None
+    top3 = top3[show_cols]
+
+    st.dataframe(top3)
+    st.download_button(
+        "📥 Top 3 Wettkämpfe als CSV",
+        top3.to_csv(index=False, encoding='utf-8-sig'),
+        file_name="top3_competitions.csv",
+        mime="text/csv"
+    )
+
 # Hauptmenü
 def main():
     if "page" not in st.session_state:
@@ -3052,6 +3101,7 @@ def main():
         "Piste Resultate anzeigen",
         "Wettkampfresultate eingeben",
         "Wettkampfauswertungen",
+        "Wettkaempfe Top 3",
         "Piste RefPoint Competition Analyse",
         "Tool Environment",
         "Trainingsperformance - Resilienz",
@@ -3144,6 +3194,8 @@ def main():
         manage_compresults_entry()
     elif selected == "Piste RefPoint Competition Analyse":
         piste_refpoint_wettkampf_analyse()
+    elif selected == "Wettkaempfe Top 3":
+        show_top3_competitions()
     elif selected == "Tool Environment":
         manage_tool_environment()
     elif selected == "Trainingsperformance - Resilienz":
