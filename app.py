@@ -1915,35 +1915,64 @@ def show_top3_wettkaempfe():
         st.info("Keine Top-3-Wettkampf-Daten vorhanden.")
         return
 
-    # Filter nach Jahr und Nachname
+    # Multi-Selection Filter
     jahre = sorted(df["PisteYear"].dropna().unique())
-    jahr = st.selectbox("Jahr", jahre)
+    jahr = st.multiselect("Jahr", jahre, default=jahre)
     nachnamen = sorted(df["last_name"].dropna().unique())
-    nachname = st.selectbox("Nachname", ["Alle"] + nachnamen)
+    nachname = st.multiselect("Nachname", nachnamen, default=nachnamen)
 
     if st.button("Show Results"):
-        filtered = df[df["PisteYear"] == jahr]
-        if nachname != "Alle":
-            filtered = filtered[filtered["last_name"] == nachname]
+        filtered = df[df["PisteYear"].isin(jahr)]
+        if nachname:
+            filtered = filtered[filtered["last_name"].isin(nachname)]
 
-        # Tabelle aufbereiten: Zeige pro Athlet/Jahr die Top 3 als einzelne Zeilen
+        # Tabelle aufbereiten: Zeige pro Athlet/Jahr die Top 3 als einzelne Zeilen mit allen gewünschten Spalten
         rows = []
         for _, row in filtered.iterrows():
+            age = row.get("age")
+            refaverage = row.get("refaverage")
+            pointsaverageaverage = row.get("pointsaverageaverage")
+            pointsaverageref = row.get("pointsaverageref%")
+            quality = row.get("quality")
+            pisteyear = row.get("PisteYear")
             for i in range(1, 4):
                 comp = row.get(f"competition{i}")
                 pts = row.get(f"points{i}")
+                discipline = row.get(f"discipline{i}")
+                reference = row.get(f"reference{i}")
+                pointsaverage = row.get(f"pointsaverage{i}")
                 if comp not in (None, "", "nan") and pts not in (None, "", "nan"):
                     rows.append({
                         "Vorname": row.get("first_name"),
                         "Nachname": row.get("last_name"),
-                        "Jahr": row.get("PisteYear"),
+                        "Jahr": pisteyear,
                         "Wettkampf": comp,
-                        "Punkte": pts
+                        "Disziplin": discipline,
+                        "Alter": age,
+                        "Reference": reference,
+                        "RefAverage": refaverage,
+                        "Points": pts,
+                        "PointsAverage": pointsaverage,
+                        "PointsAverageAverage": pointsaverageaverage,
+                        "PointsAverageRef%": pointsaverageref,
+                        "Quality": quality,
+                        "PisteYear": pisteyear
                     })
         top3_df = pd.DataFrame(rows)
         if top3_df.empty:
             st.info("Keine Top-3-Wettkämpfe für die Auswahl gefunden.")
             return
+
+        # Spaltenreihenfolge wie gewünscht
+        show_cols = [
+            "Vorname", "Nachname", "Jahr", "Wettkampf", "Disziplin", "Alter",
+            "Reference", "RefAverage", "Points", "PointsAverage", "PointsAverageAverage",
+            "PointsAverageRef%", "Quality", "PisteYear"
+        ]
+        for col in show_cols:
+            if col not in top3_df.columns:
+                top3_df[col] = None
+        top3_df = top3_df[show_cols]
 
         st.dataframe(top3_df)
         st.download_button(
