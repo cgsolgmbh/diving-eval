@@ -3013,7 +3013,7 @@ def referenztabellen_anzeigen():
 
     # --- piste total in points ---
     st.subheader("🏅 Piste Points (PisteTotalinPoints)")
-    pistepoints_df = pd.DataFrame(fetch_all_rows("pistetotalinpoints", select="*"))
+    pistepoints_df = pd.DataFrame(fetch_all_rows("PisteTotalinPoints", select="*"))
     if not pistepoints_df.empty:
         cols = ["age"] + [str(i) for i in range(1, 10)]
         for col in cols:
