@@ -3011,6 +3011,29 @@ def referenztabellen_anzeigen():
     else:
         st.info("Keine Daten in pisterefcomppoints.")
 
+    # --- Piste Points für PisteTotalinPoints ---
+    st.subheader("🏅 Piste Points (PisteTotalinPoints)")
+    pistedisciplines = pd.DataFrame(fetch_all_rows("pistedisciplines", select="id,name"))
+    pistetotalinpoints_id = None
+    if not pistedisciplines.empty:
+        pistetotalinpoints_id = pistedisciplines[pistedisciplines["name"] == "PisteTotalinPoints"]["id"].iloc[0]
+    if pistetotalinpoints_id:
+        pistepoints_df = pd.DataFrame(fetch_all_rows("scoretables", select="*",
+                                                    discipline_id=pistetotalinpoints_id))
+        if not pistepoints_df.empty:
+            pistepoints_df = pistepoints_df.sort_values("result_min")
+            pistepoints_df = pistepoints_df[["result_min", "result_max", "points"]]
+            pistepoints_df = pistepoints_df.rename(columns={
+                "result_min": "Von (Durchschnitt)",
+                "result_max": "Bis (Durchschnitt)",
+                "points": "Piste Points"
+            })
+            st.dataframe(pistepoints_df)
+            st.download_button("📥 Piste Points als CSV", pistepoints_df.to_csv(index=False, encoding='utf-8-sig'), file_name="piste_points.csv", mime="text/csv")
+        else:
+            st.info("Keine Piste Points für PisteTotalinPoints gefunden.")
+    else:
+        st.info("Disziplin 'PisteTotalinPoints' nicht gefunden.")
 
 # Hauptmenü
 def main():
