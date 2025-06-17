@@ -3181,7 +3181,7 @@ def main():
     elif selected == "Piste RefPoint Competition Analyse":
         piste_refpoint_wettkampf_analyse()
     elif selected == "Wettkaempfe Top 3":
-        show_top3_competitions()
+        show_top3_wettkaempfe()
     elif selected == "Tool Environment":
         manage_tool_environment()
     elif selected == "Trainingsperformance - Resilienz":
