@@ -1906,6 +1906,41 @@ def piste_refpoint_wettkampf_analyse():
                   .eq("PisteYear", int(selected_year)).execute()
             st.success(f"Entwicklung für {updated} Personen berechnet und gespeichert.")
 
+def show_top3_wettkaempfe():
+    st.header("🏆 Top 3 Wettkämpfe pro Athlet und Jahr")
+
+    # Daten laden
+    df = pd.DataFrame(fetch_all_rows("pisterefcompresults", select="*"))
+    if df.empty:
+        st.info("Keine Top-3-Wettkampf-Daten vorhanden.")
+        return
+
+    # Filter nach Jahr und Nachname
+    jahre = sorted(df["PisteYear"].dropna().unique())
+    jahr = st.selectbox("Jahr", jahre)
+    nachnamen = sorted(df["last_name"].dropna().unique())
+    nachname = st.selectbox("Nachname", ["Alle"] + nachnamen)
+
+    filtered = df[df["PisteYear"] == jahr]
+    if nachname != "Alle":
+        filtered = filtered[filtered["last_name"] == nachname]
+
+    # Tabelle aufbereiten: Zeige pro Athlet/Jahr die Top 3 als einzelne Zeilen
+    rows = []
+    for _, row in filtered.iterrows():
+        for i in range(1, 4):
+            comp = row.get(f"competition{i}")
+            pts = row.get(f"points{i}")
+            if comp not in (None, "", "nan") and pts not in (None, "", "nan"):
+                rows.append({
+                    "Vorname": row.get("first_name"),
+                    "Nachname": row.get("last_name"),
+                    "Jahr": row.get("PisteYear"),
+                    "Wettkampf": comp,
+                    "Punkte": pts
+                })
+    top3_df = pd.DataFrame(rows)
+
 def manage_tool_environment():
     st.header("🛠️ Tool Environment Werte eingeben oder importieren")
 
@@ -3034,37 +3069,6 @@ def referenztabellen_anzeigen():
             st.info("Keine Piste Points für PisteTotalinPoints gefunden.")
     else:
         st.info("Disziplin 'PisteTotalinPoints' nicht gefunden.")
-
-def show_top3_competitions(top3_df):
-    st.header("🏆 Top 3 Wettkämpfe pro Athlet und Jahr")
-    st.write("Spalten in top3_df:", top3_df.columns.tolist())
-    if top3_df is None or top3_df.empty:
-        st.info("Keine Top-3-Wettkampf-Daten vorhanden.")
-        return
-
-    # Filter nach Jahr und Name
-    years = sorted(top3_df["Jahr"].dropna().unique())
-    year = st.selectbox("Jahr", years)
-    names = sorted(top3_df["Nachname"].dropna().unique())
-    name = st.selectbox("Nachname", ["Alle"] + names)
-
-    filtered = top3_df[top3_df["Jahr"] == year]
-    if name != "Alle":
-        filtered = filtered[filtered["Nachname"] == name]
-
-    show_cols = ["Vorname", "Nachname", "Jahr", "Wettkampf", "Punkte"]
-    for col in show_cols:
-        if col not in filtered.columns:
-            filtered[col] = None
-    filtered = filtered[show_cols]
-
-    st.dataframe(filtered)
-    st.download_button(
-        "📥 Top 3 Wettkämpfe als CSV",
-        filtered.to_csv(index=False, encoding='utf-8-sig'),
-        file_name="top3_wettkaempfe.csv",
-        mime="text/csv"
-    )
 
 # Hauptmenü
 def main():
