@@ -1941,22 +1941,23 @@ def show_top3_wettkaempfe():
                 discipline = row.get(f"discipline{i}")
                 reference = row.get(f"reference{i}")
                 pointsaverage = row.get(f"pointsaverage{i}")
+                # ... ggf. weitere Felder mit {i}
                 if comp not in (None, "", "nan") and pts not in (None, "", "nan"):
                     rows.append({
                         "Vorname": row.get("first_name"),
                         "Nachname": row.get("last_name"),
-                        "Jahr": pisteyear,
+                        "Jahr": row.get("PisteYear"),
                         "Wettkampf": comp,
                         "Disziplin": discipline,
-                        "Alter": age,
+                        "Alter": row.get("age"),
                         "Reference": reference,
-                        "RefAverage": refaverage,
+                        "RefAverage": row.get("refaverage"),
                         "Points": pts,
                         "PointsAverage": pointsaverage,
-                        "PointsAverageAverage": pointsaverageaverage,
-                        "PointsAverageRef%": pointsaverageref,
-                        "Quality": quality,
-                        "PisteYear": pisteyear
+                        "PointsAverageAverage": row.get("pointsaverageaverage"),
+                        "PointsAverageRef%": row.get("pointsaverageref%"),
+                        "Quality": row.get("quality"),
+                        "PisteYear": row.get("PisteYear")
                     })
         top3_df = pd.DataFrame(rows)
         if top3_df.empty:
