@@ -214,8 +214,8 @@ def startseite():
         if st.button("Piste Punkte neu berechnen"):
             st.session_state["page"] = "Piste Punkte neu berechnen"
             st.rerun()
-        if st.button("Piste RefPoint Analyse"):
-            st.session_state["page"] = "Piste RefPoint Analyse"
+        if st.button("Piste RefPoint Competition Analyse"):
+            st.session_state["page"] = "Piste RefPoint Competition Analyse"
             st.rerun()
     with col3:
         if st.button("Tool Environment"):
@@ -3052,7 +3052,7 @@ def main():
         "Piste Resultate anzeigen",
         "Wettkampfresultate eingeben",
         "Wettkampfauswertungen",
-        "Piste RefPoint Analyse",
+        "Piste RefPoint Competition Analyse",
         "Tool Environment",
         "Trainingsperformance - Resilienz",
         "SOC Full Calculation",
@@ -3142,7 +3142,7 @@ def main():
         bewertung_wettkampf()
     elif selected == "Wettkampfresultate eingeben":
         manage_compresults_entry()
-    elif selected == "Piste RefPoint Analyse":
+    elif selected == "Piste RefPoint Competition Analyse":
         piste_refpoint_wettkampf_analyse()
     elif selected == "Tool Environment":
         manage_tool_environment()
