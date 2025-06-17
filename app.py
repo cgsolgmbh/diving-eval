@@ -1921,25 +1921,37 @@ def show_top3_wettkaempfe():
     nachnamen = sorted(df["last_name"].dropna().unique())
     nachname = st.selectbox("Nachname", ["Alle"] + nachnamen)
 
-    filtered = df[df["PisteYear"] == jahr]
-    if nachname != "Alle":
-        filtered = filtered[filtered["last_name"] == nachname]
+    if st.button("Show Results"):
+        filtered = df[df["PisteYear"] == jahr]
+        if nachname != "Alle":
+            filtered = filtered[filtered["last_name"] == nachname]
 
-    # Tabelle aufbereiten: Zeige pro Athlet/Jahr die Top 3 als einzelne Zeilen
-    rows = []
-    for _, row in filtered.iterrows():
-        for i in range(1, 4):
-            comp = row.get(f"competition{i}")
-            pts = row.get(f"points{i}")
-            if comp not in (None, "", "nan") and pts not in (None, "", "nan"):
-                rows.append({
-                    "Vorname": row.get("first_name"),
-                    "Nachname": row.get("last_name"),
-                    "Jahr": row.get("PisteYear"),
-                    "Wettkampf": comp,
-                    "Punkte": pts
-                })
-    top3_df = pd.DataFrame(rows)
+        # Tabelle aufbereiten: Zeige pro Athlet/Jahr die Top 3 als einzelne Zeilen
+        rows = []
+        for _, row in filtered.iterrows():
+            for i in range(1, 4):
+                comp = row.get(f"competition{i}")
+                pts = row.get(f"points{i}")
+                if comp not in (None, "", "nan") and pts not in (None, "", "nan"):
+                    rows.append({
+                        "Vorname": row.get("first_name"),
+                        "Nachname": row.get("last_name"),
+                        "Jahr": row.get("PisteYear"),
+                        "Wettkampf": comp,
+                        "Punkte": pts
+                    })
+        top3_df = pd.DataFrame(rows)
+        if top3_df.empty:
+            st.info("Keine Top-3-Wettkämpfe für die Auswahl gefunden.")
+            return
+
+        st.dataframe(top3_df)
+        st.download_button(
+            "📥 Top 3 Wettkämpfe als CSV",
+            top3_df.to_csv(index=False, encoding='utf-8-sig'),
+            file_name="top3_wettkaempfe.csv",
+            mime="text/csv"
+        )
 
 def manage_tool_environment():
     st.header("🛠️ Tool Environment Werte eingeben oder importieren")
