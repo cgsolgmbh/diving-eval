@@ -3011,6 +3011,25 @@ def referenztabellen_anzeigen():
     else:
         st.info("Keine Daten in pisterefcomppoints.")
 
+    # --- piste total in points ---
+    st.subheader("🏅 Piste Points (PisteTotalinPoints)")
+    pistepoints_df = pd.DataFrame(fetch_all_rows("pistetotalinpoints", select="*"))
+    if not pistepoints_df.empty:
+        cols = ["age"] + [str(i) for i in range(1, 10)]
+        for col in cols:
+            if col not in pistepoints_df.columns:
+                pistepoints_df[col] = None
+        pistepoints_df = pistepoints_df[cols]
+        st.dataframe(pistepoints_df)
+        st.download_button(
+            "📥 piste_totalinpoints als CSV",
+            pistepoints_df.to_csv(index=False, encoding='utf-8-sig'),
+            file_name="piste_totalinpoints.csv",
+            mime="text/csv"
+        )
+    else:
+        st.info("Keine Daten in piste_totalinpoints.")
+
 # Hauptmenü
 def main():
     if "page" not in st.session_state:
