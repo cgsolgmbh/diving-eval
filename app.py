@@ -1288,6 +1288,12 @@ def bewertung_wettkampf():
                 ]
                 dives = dives_row.iloc[0]['dives'] if not dives_row.empty else None
 
+            # Debug-Ausgaben einbauen:
+            if dives is None:
+                st.warning(f"Keine dives für {sex}, {category}, {discipline}")
+            if points in (None, "", "nan"):
+                st.warning(f"Keine Punkte für {row}")
+
             # AveragePoints berechnen
             average_points = None
             try:
