@@ -3125,6 +3125,7 @@ def main():
         "Piste Resultate anzeigen",
         "Wettkampfresultate eingeben",
         "Wettkampfauswertungen",
+        "Wettkampf-Bewertung",
         "Wettkaempfe Top 3",
         "Piste RefPoint Competition Analyse",
         "Tool Environment",
