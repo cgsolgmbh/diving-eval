@@ -2607,9 +2607,6 @@ def show_full_piste_results_soc():
             soc_df[col] = None
     soc_df = soc_df[show_cols]
 
-    # Debug: Zeige die ersten Zeilen mit piste
-    st.write("soc_df[['first_name','last_name','PisteYear','piste']].head(10):", soc_df[['first_name','last_name','PisteYear','piste']].head(10))
-
     # Filter
     st.subheader("🔎 Filter")
     years = sorted(soc_df["PisteYear"].dropna().unique())
