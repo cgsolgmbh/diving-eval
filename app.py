@@ -45,11 +45,20 @@ if "access_token" not in st.session_state:
 # --- Caching für selten geänderte Tabellen ---
 @st.cache_data
 
-def is_excluded_discipline(discipline, age):
-    # Jugend C: 13/14 Jahre, Jugend D: 11/12 Jahre
+def get_official_category(age, year):
+    # Passe ggf. die Spaltennamen an!
+    rows = supabase.table("agecategories").select("*")\
+        .lte("age_min", age).gte("age_max", age).execute().data
+    # Falls du ein Jahr-Feld hast, ergänze: .eq("year", year)
+    if rows:
+        return rows[0].get("category")
+    return None
+
+def is_excluded_discipline(discipline, age, year):
+    category = get_official_category(age, year)
     return (
         str(discipline).strip().lower() in ["1m synchro", "3m synchro"]
-        and int(age) in [11, 12, 13, 14]
+        and category in ["Jugend C", "Jugend D"]
     )
 
 def get_pistedisciplines():
@@ -1486,7 +1495,7 @@ def piste_refpoint_wettkampf_analyse():
                 continue
 
             # --- AUSSCHLUSS HIER ---
-            if is_excluded_discipline(discipline, age):
+            if is_excluded_discipline(discipline, age, selected_year):
                 continue
 
             ref_row = refpoints_df[
@@ -1531,7 +1540,7 @@ def piste_refpoint_wettkampf_analyse():
 
             # --- AUSSCHLUSS HIER ---
             df["age"] = df.apply(lambda r: int(selected_year) - int(r["vintage"]) if r.get("vintage") else None, axis=1)
-            df = df[~df.apply(lambda r: is_excluded_discipline(r.get("Discipline"), r.get("age")), axis=1)]
+            df = df[~df.apply(lambda r: is_excluded_discipline(r.get("Discipline"), r.get("age"), selected_year), axis=1)]
 
             grouped = df[df[ref_col].notnull() & (df[ref_col] != "")].groupby([
                 df['first_name'].str.strip().str.lower(),
@@ -1705,7 +1714,7 @@ def piste_refpoint_wettkampf_analyse():
                     discipline = cr_row.get("Discipline")
                     avg_points = cr_row.get("AveragePoints")
                     # --- AUSSCHLUSS HIER ---
-                    if is_excluded_discipline(discipline, age):
+                    if is_excluded_discipline(discipline, age, selected_year):
                         continue
                     if not (discipline and sex and avg_points and age):
                         continue
