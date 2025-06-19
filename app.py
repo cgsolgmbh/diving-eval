@@ -341,6 +341,9 @@ def manage_results_entry():
     athletes = get_athletes()
     pistedisciplines = get_pistedisciplines()
 
+    athletes = get_athletes()
+    st.write("Geladene Athleten:", athletes)
+
     athlete_names = {
         f"{a.get('first_name', '').strip()} {a.get('last_name', '').strip()}": a['id']
         for a in athletes if a.get('first_name') and a.get('last_name') and 'id' in a
