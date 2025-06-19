@@ -46,9 +46,8 @@ if "access_token" not in st.session_state:
 @st.cache_data
 
 def get_official_category(age, year):
-    # Passe ggf. die Spaltennamen an!
     rows = supabase.table("agecategories").select("*")\
-        .lte("age_min", age).gte("age_max", age).execute().data
+        .gte("age_min", age).lte("age_max", age).execute().data
     # Falls du ein Jahr-Feld hast, ergänze: .eq("year", year)
     if rows:
         return rows[0].get("category")
