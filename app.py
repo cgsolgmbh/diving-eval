@@ -355,7 +355,6 @@ def manage_results_entry():
     st.header("🎯 Ergebnisse für einen Athleten eingeben")
 
     athletes = get_athletes()
-    st.write("Geladene Athleten:", athletes[:3])  # Zeigt die ersten 3 Athleten als Beispiel
 
     pistedisciplines = get_pistedisciplines()
 
