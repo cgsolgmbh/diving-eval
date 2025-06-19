@@ -44,6 +44,14 @@ if "access_token" not in st.session_state:
         # und der Token ist dann aus der URL verschwunden
 # --- Caching für selten geänderte Tabellen ---
 @st.cache_data
+
+def is_excluded_discipline(discipline, age):
+    # Jugend C: 13/14 Jahre, Jugend D: 11/12 Jahre
+    return (
+        str(discipline).strip().lower() in ["1m synchro", "3m synchro"]
+        and int(age) in [11, 12, 13, 14]
+    )
+
 def get_pistedisciplines():
     return supabase.table('pistedisciplines').select('id, name').execute().data
 
@@ -1422,7 +1430,6 @@ def safe_numeric(val):
 def piste_refpoint_wettkampf_analyse():
     st.header("📊 Piste RefPoint Wettkampf Analyse")
 
-    # Hinweise/Bemerkungen zur Funktion
     st.info("""
     **Hinweis:**  
     Der Button **"Full Analyse"** berechnet für das angegebene Jahr:
@@ -1434,11 +1441,8 @@ def piste_refpoint_wettkampf_analyse():
     years = [str(y) for y in range(2024, 2031)]
     selected_year = st.selectbox("Jahr für Analyse wählen", years)
 
-    # --- Full Analyse Button ---
     if st.button("Full Analyse"):
-        # 1. Berechnen
         st.info("Starte: Berechnen ...")
-        # --- Code von "Berechnen" ---
         selected_year_int = int(selected_year)
         competitions = supabase.table('competitions').select('Name, PisteYear').execute().data
         compresults = supabase.table('compresults').select('*').execute().data
@@ -1481,6 +1485,10 @@ def piste_refpoint_wettkampf_analyse():
             if not (discipline and sex and points):
                 continue
 
+            # --- AUSSCHLUSS HIER ---
+            if is_excluded_discipline(discipline, age):
+                continue
+
             ref_row = refpoints_df[
                 (refpoints_df["Discipline"].astype(str).str.lower() == str(discipline).lower()) &
                 (refpoints_df["sex"].astype(str).str.lower() == str(sex).lower())
@@ -1505,7 +1513,7 @@ def piste_refpoint_wettkampf_analyse():
 
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
-        # 2. Top3 auswerten
+        # --- TOP3 AUSWERTUNG ---
         st.info("Starte: Top3 auswerten ...")
         ref_col = f"PisteRefPoints{selected_year}%"
         compresults = fetch_all_rows('compresults', select='*')
@@ -1520,6 +1528,11 @@ def piste_refpoint_wettkampf_analyse():
             athlete_vintage = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a['vintage'] for a in athletes}
             pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
             pisterefcomppoints_df = pd.DataFrame(pisterefcomppoints)
+
+            # --- AUSSCHLUSS HIER ---
+            df["age"] = df.apply(lambda r: int(selected_year) - int(r["vintage"]) if r.get("vintage") else None, axis=1)
+            df = df[~df.apply(lambda r: is_excluded_discipline(r.get("Discipline"), r.get("age")), axis=1)]
+
             grouped = df[df[ref_col].notnull() & (df[ref_col] != "")].groupby([
                 df['first_name'].str.strip().str.lower(),
                 df['last_name'].str.strip().str.lower()
@@ -1621,7 +1634,7 @@ def piste_refpoint_wettkampf_analyse():
                 inserted += 1
             st.success(f"Top3-Auswertung abgeschlossen. {inserted} Einträge für {selected_year} gespeichert.")
 
-        # 3. Entwicklung rechnen
+        # --- ENTWICKLUNG RECHNEN ---
         st.info("Starte: Entwicklung rechnen ...")
         year_list = [str(y) for y in range(2024, int(selected_year) + 1)]
         refcompresults = supabase.table("pisterefcompresults").select("*").in_("PisteYear", year_list).execute().data
@@ -1691,6 +1704,9 @@ def piste_refpoint_wettkampf_analyse():
                 for _, cr_row in cr_rows.iterrows():
                     discipline = cr_row.get("Discipline")
                     avg_points = cr_row.get("AveragePoints")
+                    # --- AUSSCHLUSS HIER ---
+                    if is_excluded_discipline(discipline, age):
+                        continue
                     if not (discipline and sex and avg_points and age):
                         continue
                     ref_row = refcomppoints_df[
