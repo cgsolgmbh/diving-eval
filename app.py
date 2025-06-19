@@ -46,11 +46,15 @@ if "access_token" not in st.session_state:
 @st.cache_data
 
 def get_official_category(age, year):
-    rows = supabase.table("agecategories").select("*")\
-        .gte("age_min", age).lte("age_max", age).execute().data
-    # Falls du ein Jahr-Feld hast, ergänze: .eq("year", year)
-    if rows:
-        return rows[0].get("category")
+    try:
+        age = int(age)
+        # Falls du ein Jahr-Feld hast, ergänze .eq("year", int(year))
+        rows = supabase.table("agecategories").select("*")\
+            .gte("age_min", age).lte("age_max", age).execute().data
+        if rows:
+            return rows[0].get("category")
+    except Exception as e:
+        st.error(f"Fehler bei get_official_category: {e}")
     return None
 
 def is_excluded_discipline(discipline, age, year):
