@@ -335,23 +335,38 @@ def get_category_from_testyear(vintage, test_year):
     return "Unbekannt"
 
 # Ergebnisseingabe
+def get_athletes():
+    # Holt alle Athleten aus Supabase, auch bei mehr als 1000 Einträgen
+    all_athletes = []
+    page = 0
+    page_size = 1000
+    while True:
+        result = supabase.table("athletes").select("*").range(page * page_size, (page + 1) * page_size - 1).execute()
+        data = result.data if hasattr(result, "data") else result.get("data", [])
+        if not data:
+            break
+        all_athletes.extend(data)
+        if len(data) < page_size:
+            break
+        page += 1
+    return all_athletes
+
 def manage_results_entry():
     st.header("🎯 Ergebnisse für einen Athleten eingeben")
 
-    st.write("manage_results_entry gestartet")
     athletes = get_athletes()
-    st.write("Geladene Athleten:", athletes)
+    st.write("Geladene Athleten:", athletes[:3])  # Zeigt die ersten 3 Athleten als Beispiel
 
-    athletes = get_athletes()
     pistedisciplines = get_pistedisciplines()
-
-    athletes = get_athletes()
-    st.write("Geladene Athleten:", athletes)
 
     athlete_names = {
         f"{a.get('first_name', '').strip()} {a.get('last_name', '').strip()}": a['id']
         for a in athletes if a.get('first_name') and a.get('last_name') and 'id' in a
     }
+    if not athlete_names:
+        st.warning("Keine Athleten mit Vor- und Nachnamen gefunden! Prüfe die Datenbank und die Feldnamen.")
+        return
+
     selected_athlete_name = st.selectbox("Wähle einen Athleten", list(athlete_names.keys()))
     test_year = st.text_input("Testjahr (Format: yyyy)", value=str(datetime.date.today().year))
 
@@ -423,12 +438,12 @@ def manage_results_entry():
                         'TestYear': int(test_year)
                     }).execute()
 
-            # ... (Rest Spezialdisziplinen wie gehabt) ...
+            st.success("✅ Ergebnisse gespeichert und Punkte berechnet!")
 
     st.markdown("---")
     st.subheader("📤 Ergebnisse per Datei importieren")
 
-    # ... (Beispiel-Datei und Upload wie gehabt) ...
+    uploaded_file = st.file_uploader("CSV/XLSX-Datei mit Ergebnissen hochladen", type=["csv", "xlsx"])
 
     if uploaded_file:
         if uploaded_file.name.endswith(".csv"):
@@ -445,7 +460,7 @@ def manage_results_entry():
         athlete_records = get_athletes()
         athlete_lookup = {
             (a['first_name'].strip().lower(), a['last_name'].strip().lower()): a
-            for a in athlete_records
+            for a in athlete_records if a.get('first_name') and a.get('last_name')
         }
 
         excluded_ids = {
@@ -515,8 +530,6 @@ def manage_results_entry():
                         'TestYear': test_year
                     }).execute()
             inserted_count += 1
-
-            # ... (Rest Spezialdisziplinen wie gehabt) ...
 
         st.success(f"✅ {inserted_count} Ergebnisse importiert.")
         if skipped_rows:
