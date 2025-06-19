@@ -338,6 +338,10 @@ def get_category_from_testyear(vintage, test_year):
 def manage_results_entry():
     st.header("🎯 Ergebnisse für einen Athleten eingeben")
 
+    st.write("manage_results_entry gestartet")
+    athletes = get_athletes()
+    st.write("Geladene Athleten:", athletes)
+
     athletes = get_athletes()
     pistedisciplines = get_pistedisciplines()
 
