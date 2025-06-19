@@ -83,17 +83,25 @@ def get_points(discipline_id, result, category, sex):
     try:
         if not discipline_id or not category or not sex:
             return 0
+        if result in (None, "", " ", "nan"):
+            return 0
+        # NEU: Wenn raw_result 9999 ist, immer 0 Punkte zurückgeben
+        if str(result).strip() == "9999":
+            return 0
         score_rows = supabase.table('scoretables').select('*')\
             .eq('discipline_id', discipline_id)\
             .eq('category', category.strip())\
             .eq('sex', sex.capitalize())\
             .execute().data
-        score_rows = sorted(score_rows, key=lambda x: float(x['result_min']))
+        score_rows = sorted(score_rows, key=lambda x: float(x['result_min']) if x['result_min'] not in (None, "", "nan") else float('-inf'))
         for row in score_rows:
             try:
+                if row['result_min'] in (None, "", "nan") or row['result_max'] in (None, "", "nan"):
+                    continue
                 rmin = float(row['result_min'])
                 rmax = float(row['result_max'])
-                if rmin <= float(result) <= rmax:
+                val = float(result)
+                if rmin <= val <= rmax:
                     return row['points']
             except Exception:
                 continue
