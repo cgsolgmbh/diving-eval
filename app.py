@@ -1501,7 +1501,7 @@ def piste_refpoint_wettkampf_analyse():
                 continue
 
             # --- AUSSCHLUSS HIER ---
-            if is_excluded_discipline(discipline, age, selected_year):
+            if is_excluded_discipline_local(discipline, age, selected_year, agecat_df):
                 continue
 
             ref_row = refpoints_df[
@@ -1720,7 +1720,7 @@ def piste_refpoint_wettkampf_analyse():
                     discipline = cr_row.get("Discipline")
                     avg_points = cr_row.get("AveragePoints")
                     # --- AUSSCHLUSS HIER ---
-                    if is_excluded_discipline(discipline, age, selected_year):
+                    if is_excluded_discipline_local(discipline, age, selected_year, agecat_df):
                         continue
                     if not (discipline and sex and avg_points and age):
                         continue
