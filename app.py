@@ -341,13 +341,9 @@ def manage_results_entry():
     athletes = get_athletes()
     pistedisciplines = get_pistedisciplines()
 
-    for a in athletes:
-        if 'first_name' not in a or 'last_name' not in a or 'id' not in a:
-            st.warning(f"Athlet ohne Name oder ID: {a}")
-
     athlete_names = {
-    f"{a.get('first_name', '').strip()} {a.get('last_name', '').strip()}": a['id']
-    for a in athletes if a.get('first_name') and a.get('last_name') and 'id' in a
+        f"{a.get('first_name', '').strip()} {a.get('last_name', '').strip()}": a['id']
+        for a in athletes if a.get('first_name') and a.get('last_name') and 'id' in a
     }
     selected_athlete_name = st.selectbox("Wähle einen Athleten", list(athlete_names.keys()))
     test_year = st.text_input("Testjahr (Format: yyyy)", value=str(datetime.date.today().year))
