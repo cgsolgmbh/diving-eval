@@ -90,12 +90,15 @@ def get_points(discipline_id, result, category, sex):
             .eq('category', category.strip())\
             .eq('sex', sex.capitalize())\
             .execute().data
-        score_rows = sorted(score_rows, key=lambda x: float(x['result_min']))
+        score_rows = sorted(score_rows, key=lambda x: float(x['result_min']) if x['result_min'] not in (None, "", "nan") else float('-inf'))
         for row in score_rows:
             try:
+                if row['result_min'] in (None, "", "nan") or row['result_max'] in (None, "", "nan"):
+                    continue
                 rmin = float(row['result_min'])
                 rmax = float(row['result_max'])
-                if rmin <= float(result) <= rmax:
+                val = float(result)
+                if rmin <= val <= rmax:
                     return row['points']
             except Exception:
                 continue
