@@ -1960,7 +1960,7 @@ def bio_mirwald():
     st.subheader("Einzel-Eingabe")
     selected_name = st.selectbox("Athlet auswählen", athlete_names)
     pisteyear = st.number_input("PisteYear", min_value=2000, max_value=2100, value=datetime.date.today().year)
-    bioentwstand = st.selectbox("bioentwstand", [-1, 0, 1])
+    bioentwstand = st.selectbox("bioentwstand", [1, 2, 3])
 
     if st.button("Speichern"):
         first_name, last_name = selected_name.split(" ", 1)
