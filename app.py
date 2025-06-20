@@ -2452,7 +2452,7 @@ def soc_full_calculation():
         # --- totalpoints berechnen und speichern ---
         fields = [
             "competitions", "trainingperf", "piste", "compenhancement",
-            "resilience", "trainingtime", "trainingsince", "toolenvironment", "quality", "bioagevalue, "mirwaldvalue"  # bioagevalue hinzugefügt!
+            "resilience", "trainingtime", "trainingsince", "toolenvironment", "quality", "bioagevalue", "mirwaldvalue"
         ]
         for key, data in athlete_data_map.items():
             existing = supabase.table("socadditionalvalues").select("*")\
