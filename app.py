@@ -3160,7 +3160,7 @@ def main():
     elif selected == "Athleten anzeigen":
         athleten_anzeigen()
     elif selected == "Piste Mirwald":
-        piste_mirwald()
+        bio_mirwald()
     elif selected == "Piste Resultate anzeigen":
         auswertung_starten()
     elif selected == "Piste Ergebnisse eingeben":
