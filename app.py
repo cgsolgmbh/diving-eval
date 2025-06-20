@@ -775,6 +775,19 @@ def manage_scoretable():
 def import_athletes():
     st.header("📥 Athleten importieren")
 
+    # Button für Bioage-Update ALLER Athleten
+    if st.button("🔄 Bioage für alle bestehenden Athleten berechnen und speichern"):
+        athletes = supabase.table("athletes").select("id, birthdate").execute().data
+        updated = 0
+        for a in athletes:
+            birthdate = a.get("birthdate")
+            athlete_id = a.get("id")
+            bioage = get_birth_quarter(birthdate)
+            if bioage and athlete_id:
+                supabase.table("athletes").update({"bioage": bioage}).eq("id", athlete_id).execute()
+                updated += 1
+        st.success(f"Bioage für {updated} Athleten aktualisiert!")
+
     uploaded_file = st.file_uploader("CSV-Datei mit Athletendaten hochladen", type="csv")
 
     # 📄 Beispiel-CSV zum Herunterladen anbieten
@@ -809,6 +822,7 @@ def import_athletes():
                 vintage = int(row['birthdate'][:4])
                 full_name = f"{row['first_name']} {row['last_name']}"
                 category = get_category_from_testyear(vintage, datetime.date.today().year)
+                bioage = get_birth_quarter(birthdate)
 
                 # Prüfen, ob Athlet bereits existiert
                 existing = supabase.table('athletes').select('id').eq('first_name', row['first_name'].strip())\
@@ -831,7 +845,8 @@ def import_athletes():
                     'nationalteam': row['nationalteam'],
                     'vintage': vintage,
                     'full_name': full_name,
-                    'category': category
+                    'category': category,
+                    'bioage': bioage
                 }).execute()
                 inserted += 1
             except Exception as e:
@@ -842,18 +857,6 @@ def import_athletes():
             st.dataframe(pd.DataFrame(skipped_duplicates))
 
         st.success(f"✅ {inserted} Athleten erfolgreich importiert.")
-
-        if st.button("🔄 Bioage für alle Athleten berechnen und speichern"):
-        athletes = supabase.table("athletes").select("id, birthdate").execute().data
-        updated = 0
-        for a in athletes:
-            birthdate = a.get("birthdate")
-            athlete_id = a.get("id")
-            bioage = get_birth_quarter(birthdate)
-            if bioage and athlete_id:
-                supabase.table("athletes").update({"bioage": bioage}).eq("id", athlete_id).execute()
-                updated += 1
-        st.success(f"Bioage für {updated} Athleten aktualisiert!")
 
 def delete_athlete():
     st.header("🗑️ Athlet löschen")
