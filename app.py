@@ -2479,7 +2479,7 @@ def show_full_piste_results_soc():
         "first_name", "last_name", "Category", "sex", "PisteYear",
         "competitions", "trainingperf", "piste", "compenhancement",
         "resilience", "trainingtime", "trainingsince", "toolenvironment",
-        "quality", "totalpoints", "pisteminregio", "pisteminnational", "CompPointsNationalTeam", "talentcard"
+        "quality", "bioagevalue", "totalpoints", "pisteminregio", "pisteminnational", "CompPointsNationalTeam", "talentcard"
     ]
     # Füge fehlende Spalten als leere Spalten hinzu (für robustes Verhalten)
     for col in show_cols:
