@@ -2745,7 +2745,7 @@ def athleten_anzeigen():
         return
 
     # Nur gewünschte Spalten
-    show_cols = ["first_name", "last_name", "birthdate", "club", "category", "sex", "nationalteam", "vintage"]
+    show_cols = ["first_name", "last_name", "birthdate", "club", "category", "sex", "nationalteam", "vintage", "bioage"]
     for col in show_cols:
         if col not in df.columns:
             df[col] = None
