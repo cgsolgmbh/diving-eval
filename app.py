@@ -779,14 +779,20 @@ def import_athletes():
     if st.button("🔄 Bioage für alle bestehenden Athleten berechnen und speichern"):
         athletes = supabase.table("athletes").select("id, birthdate").execute().data
         updated = 0
+        skipped = 0
         for a in athletes:
             birthdate = a.get("birthdate")
             athlete_id = a.get("id")
+            if not birthdate or not athlete_id:
+                skipped += 1
+                continue
             bioage = get_birth_quarter(birthdate)
-            if bioage and athlete_id:
+            if bioage:
                 supabase.table("athletes").update({"bioage": bioage}).eq("id", athlete_id).execute()
                 updated += 1
-        st.success(f"Bioage für {updated} Athleten aktualisiert!")
+            else:
+                skipped += 1
+        st.success(f"Bioage für {updated} Athleten aktualisiert. {skipped} Athleten übersprungen (fehlendes oder ungültiges Geburtsdatum).")
 
     uploaded_file = st.file_uploader("CSV-Datei mit Athletendaten hochladen", type="csv")
 
