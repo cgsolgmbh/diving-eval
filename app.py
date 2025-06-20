@@ -2143,8 +2143,8 @@ def soc_full_calculation():
     if st.button("SOC Full Calculation starten"):
         pisteyear = int(selected_year)
 
-        # Alle Athleten laden
-        athletes = supabase.table('athletes').select('id, first_name, last_name, birthdate, sex, vintage').execute().data
+        # Alle Athleten laden (jetzt inkl. bioage)
+        athletes = supabase.table('athletes').select('id, first_name, last_name, birthdate, sex, vintage, bioage').execute().data
         athletes_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a for a in athletes}
 
         # pisterefcompresults laden (enthält refaverage, performance, pointsaverageref%)
@@ -2198,6 +2198,12 @@ def soc_full_calculation():
                     "PisteYear": pisteyear,
                     "Category": get_category_from_agecategories(athlete.get('vintage'), pisteyear, agecategories)
                 }
+
+            # --- NEU: bioagevalue berechnen und speichern ---
+            bioage = athlete.get("bioage")
+            bioage_map = {"q1": -1, "q2": -0.5, "q3": 0.5, "q4": 1}
+            bioagevalue = bioage_map.get(str(bioage).lower(), 0) if bioage else 0
+            athlete_data_map[key]["bioagevalue"] = bioagevalue
             # Tool Environment Wert aus pisteenvironment holen
             env_row = supabase.table("pisteenvironment").select("toolenvvalue").eq("first_name", athlete['first_name']).eq("last_name", athlete['last_name']).eq("PisteYear", pisteyear).execute().data
             if env_row:
@@ -2362,7 +2368,7 @@ def soc_full_calculation():
         # --- totalpoints berechnen und speichern ---
         fields = [
             "competitions", "trainingperf", "piste", "compenhancement",
-            "resilience", "trainingtime", "trainingsince", "toolenvironment", "quality"
+            "resilience", "trainingtime", "trainingsince", "toolenvironment", "quality", "bioagevalue"  # bioagevalue hinzugefügt!
         ]
         for key, data in athlete_data_map.items():
             existing = supabase.table("socadditionalvalues").select("*")\
