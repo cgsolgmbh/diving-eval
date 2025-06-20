@@ -3145,6 +3145,20 @@ def referenztabellen_anzeigen():
     else:
         st.info("Disziplin 'CompPerfQualityCalc' nicht gefunden.")
 
+    # --- Total Points for Card ---
+    st.subheader("🏅 Total Points for Card (pisterefminpoints)")
+    cardpoints_df = pd.DataFrame(fetch_all_rows("pisterefminpoints", select="*"))
+    if not cardpoints_df.empty:
+        cols = ["age", "points_max", "regio_min", "national_min"]
+        for col in cols:
+            if col not in cardpoints_df.columns:
+                cardpoints_df[col] = None
+        cardpoints_df = cardpoints_df[cols]
+        st.dataframe(cardpoints_df)
+        st.download_button("📥 Total Points for Card als CSV", cardpoints_df.to_csv(index=False, encoding='utf-8-sig'), file_name="total_points_for_card.csv", mime="text/csv")
+    else:
+        st.info("Keine Daten in pisterefminpoints (Total Points for Card).")
+
 def athleten_eingeben():
     st.header("📝 Neuen Athleten hinzufügen")
 
