@@ -1949,6 +1949,77 @@ def manage_tool_environment():
                 st.warning("Folgende Personen wurden nicht importiert, da sie nicht in der Athletenliste stehen:")
                 st.dataframe(pd.DataFrame(skipped))
 
+def bio_mirwald():
+    st.header("🧬 Bio Mirwald Eingabe & Import")
+
+    # --- Einzel-Eingabe ---
+    athletes = supabase.table('athletes').select('first_name, last_name').execute().data
+    athlete_names = [f"{a['first_name']} {a['last_name']}" for a in athletes]
+    athlete_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a for a in athletes}
+
+    st.subheader("Einzel-Eingabe")
+    selected_name = st.selectbox("Athlet auswählen", athlete_names)
+    pisteyear = st.number_input("PisteYear", min_value=2000, max_value=2100, value=datetime.date.today().year)
+    bioentwstand = st.selectbox("bioentwstand", [-1, 0, 1])
+
+    if st.button("Speichern"):
+        first_name, last_name = selected_name.split(" ", 1)
+        supabase.table("pistemirwald").insert({
+            "first_name": first_name,
+            "last_name": last_name,
+            "PisteYear": int(pisteyear),
+            "bioentwstand": int(bioentwstand)
+        }).execute()
+        st.success(f"Eintrag für {selected_name} gespeichert.")
+
+    st.markdown("---")
+
+    # --- CSV-Import ---
+    st.subheader("CSV-Import")
+    sample_df = pd.DataFrame([{
+        "first_name": "Max",
+        "last_name": "Mustermann",
+        "PisteYear": 2024,
+        "bioentwstand": 1
+    }])
+    st.download_button(
+        label="📄 Beispiel-CSV herunterladen",
+        data=sample_df.to_csv(index=False).encode("utf-8"),
+        file_name="bio_mirwald_beispiel.csv",
+        mime="text/csv"
+    )
+
+    uploaded_file = st.file_uploader("CSV-Datei mit Mirwald-Daten hochladen", type="csv")
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        required_columns = {"first_name", "last_name", "PisteYear", "bioentwstand"}
+        if not required_columns.issubset(df.columns):
+            st.error(f"❌ Die Datei muss folgende Spalten enthalten: {', '.join(required_columns)}")
+            return
+
+        missing_athletes = []
+        inserted = 0
+        for _, row in df.iterrows():
+            key = (str(row['first_name']).strip().lower(), str(row['last_name']).strip().lower())
+            if key not in athlete_lookup:
+                missing_athletes.append({"first_name": row['first_name'], "last_name": row['last_name']})
+                continue
+            try:
+                supabase.table("pistemirwald").insert({
+                    "first_name": row['first_name'],
+                    "last_name": row['last_name'],
+                    "PisteYear": int(row['PisteYear']),
+                    "bioentwstand": int(row['bioentwstand'])
+                }).execute()
+                inserted += 1
+            except Exception as e:
+                st.warning(f"Fehler beim Einfügen von {row['first_name']} {row['last_name']}: {e}")
+
+        st.success(f"{inserted} Einträge erfolgreich importiert.")
+        if missing_athletes:
+            st.warning(f"{len(missing_athletes)} Athlet(en) nicht gefunden:")
+            st.dataframe(pd.DataFrame(missing_athletes))
+
 def manage_trainingsperformance_resilienz():
     st.header("💪 Trainingsperformance - Resilienz")
 
@@ -3061,6 +3132,7 @@ def main():
         "Wettkaempfe Top 3",
         "Piste RefPoint Competition Analyse",
         "Tool Environment",
+        "Piste Mirwald",
         "Trainingsperformance - Resilienz",
         "SOC Full Calculation",
         "Full PISTE Results SOC",
@@ -3087,7 +3159,8 @@ def main():
         delete_athlete()
     elif selected == "Athleten anzeigen":
         athleten_anzeigen()
-    
+    elif selected == "Piste Mirwald":
+        piste_mirwald()
     elif selected == "Piste Resultate anzeigen":
         auswertung_starten()
     elif selected == "Piste Ergebnisse eingeben":
