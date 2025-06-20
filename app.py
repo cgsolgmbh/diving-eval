@@ -2275,6 +2275,19 @@ def soc_full_calculation():
             bioage_map = {"q1": -1, "q2": -0.5, "q3": 0.5, "q4": 1}
             bioagevalue = bioage_map.get(str(bioage).lower(), 0) if bioage else 0
             athlete_data_map[key]["bioagevalue"] = bioagevalue
+
+            # --- NEU: Mirwald-Wert holen und speichern ---
+            mirwald_rows = supabase.table("pistemirwald").select("bioentwstand").eq("first_name", athlete['first_name']).eq("last_name", athlete['last_name']).eq("PisteYear", pisteyear).execute().data
+            mirwald_map = {3: 1, 2: 0, 1: -1}
+            mirwaldvalue = 0
+            if mirwald_rows and "bioentwstand" in mirwald_rows[0]:
+                try:
+                    bioentwstand = int(mirwald_rows[0]["bioentwstand"])
+                    mirwaldvalue = mirwald_map.get(bioentwstand, 0)
+                except Exception:
+                    mirwaldvalue = 0
+            athlete_data_map[key]["mirwaldvalue"] = mirwaldvalue
+
             # Tool Environment Wert aus pisteenvironment holen
             env_row = supabase.table("pisteenvironment").select("toolenvvalue").eq("first_name", athlete['first_name']).eq("last_name", athlete['last_name']).eq("PisteYear", pisteyear).execute().data
             if env_row:
@@ -2439,7 +2452,7 @@ def soc_full_calculation():
         # --- totalpoints berechnen und speichern ---
         fields = [
             "competitions", "trainingperf", "piste", "compenhancement",
-            "resilience", "trainingtime", "trainingsince", "toolenvironment", "quality", "bioagevalue"  # bioagevalue hinzugefügt!
+            "resilience", "trainingtime", "trainingsince", "toolenvironment", "quality", "bioagevalue, "mirwaldvalue"  # bioagevalue hinzugefügt!
         ]
         for key, data in athlete_data_map.items():
             existing = supabase.table("socadditionalvalues").select("*")\
