@@ -317,6 +317,24 @@ def get_category_from_agecategories(vintage, pisteyear, agecategories):
         st.warning(f"Fehler bei Kategorie-Berechnung: {e}")
     return None
 
+def get_birth_quarter(birthdate):
+    # birthdate als String: "YYYY-MM-DD" oder datetime.date
+    if isinstance(birthdate, str):
+        try:
+            birthdate = pd.to_datetime(birthdate)
+        except Exception:
+            return None
+    month = birthdate.month
+    if 1 <= month <= 3:
+        return "q1"
+    elif 4 <= month <= 6:
+        return "q2"
+    elif 7 <= month <= 9:
+        return "q3"
+    elif 10 <= month <= 12:
+        return "q4"
+    return None
+
 # Punkteberechnung
 def get_points(discipline_id, result, category, sex):
     try:
@@ -756,6 +774,18 @@ def manage_scoretable():
 
 def import_athletes():
     st.header("📥 Athleten importieren")
+
+    if st.button("🔄 Bioage für alle Athleten berechnen und speichern"):
+    athletes = supabase.table("athletes").select("id, birthdate").execute().data
+    updated = 0
+    for a in athletes:
+        birthdate = a.get("birthdate")
+        athlete_id = a.get("id")
+        bioage = get_birth_quarter(birthdate)
+        if bioage and athlete_id:
+            supabase.table("athletes").update({"bioage": bioage}).eq("id", athlete_id).execute()
+            updated += 1
+    st.success(f"Bioage für {updated} Athleten aktualisiert!")
 
     uploaded_file = st.file_uploader("CSV-Datei mit Athletendaten hochladen", type="csv")
 
@@ -2941,6 +2971,61 @@ def referenztabellen_anzeigen():
     else:
         st.info("Disziplin 'PisteTotalinPoints' nicht gefunden.")
 
+def athleten_eingeben():
+    st.header("📝 Neuen Athleten hinzufügen")
+
+    # Sekundäre Aktionen direkt hier verfügbar machen
+    st.markdown("#### ⚙️ Zusätzliche Aktionen")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📥 Athleten importieren"):
+            import_athletes()
+    with col2:
+        if st.button("✏️ Athleten bearbeiten"):
+            edit_athletes()
+
+    st.markdown("---")
+
+    # Standardformular zum Hinzufügen
+    first_name = st.text_input("Vorname")
+    last_name = st.text_input("Nachname")
+    birthdate = st.date_input("Geburtsdatum", min_value=datetime.date(1920, 1, 1), max_value=datetime.date.today())
+    sex = st.selectbox("Geschlecht", ["male", "female"])
+
+    teams = supabase.table('team').select('ShortName').execute().data
+    club_options = [t['ShortName'] for t in teams if t.get('ShortName')]
+    club = st.selectbox("Verein", club_options)
+
+    nationalteam = st.selectbox("Nationalteam", ["yes", "no"])
+    vintage = birthdate.year
+    full_name = f"{first_name} {last_name}"
+    category = get_category_from_testyear(vintage, datetime.date.today().year)
+
+    # Quartal berechnen und in bioage speichern
+    bioage = get_birth_quarter(birthdate)
+
+    if st.button("Athlet speichern"):
+        # Prüfen, ob Athlet bereits existiert
+        existing = supabase.table('athletes').select('id').eq('first_name', first_name.strip())\
+            .eq('last_name', last_name.strip())\
+            .eq('birthdate', birthdate.strftime('%Y-%m-%d')).execute().data
+        if existing:
+            st.error(f"Athlet {full_name} mit Geburtsdatum {birthdate.strftime('%Y-%m-%d')} existiert bereits!")
+        else:
+            supabase.table('athletes').insert({
+                'first_name': first_name,
+                'last_name': last_name,
+                'birthdate': birthdate.strftime('%Y-%m-%d'),
+                'sex': sex,
+                'club': club,
+                'nationalteam': nationalteam,
+                'vintage': vintage,
+                'full_name': full_name,
+                'category': category,
+                'bioage': bioage
+            }).execute()
+            st.success(f"Athlet {full_name} gespeichert!")
+
 # Hauptmenü
 def main():
     if "page" not in st.session_state:
@@ -2979,56 +3064,7 @@ def main():
     if selected == "Startseite":
         startseite()        
     elif selected == "Athleten eingeben":
-        st.header("📝 Neuen Athleten hinzufügen")
-
-        # Sekundäre Aktionen direkt hier verfügbar machen
-        st.markdown("#### ⚙️ Zusätzliche Aktionen")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("📥 Athleten importieren"):
-                import_athletes()
-        with col2:
-            if st.button("✏️ Athleten bearbeiten"):
-                edit_athletes()
-
-        st.markdown("---")
-
-        # Standardformular zum Hinzufügen
-        first_name = st.text_input("Vorname")
-        last_name = st.text_input("Nachname")
-        birthdate = st.date_input("Geburtsdatum", min_value=datetime.date(1920, 1, 1), max_value=datetime.date.today())
-        sex = st.selectbox("Geschlecht", ["male", "female"])
-
-        teams = supabase.table('team').select('ShortName').execute().data
-        club_options = [t['ShortName'] for t in teams if t.get('ShortName')]
-        club = st.selectbox("Verein", club_options)
-
-        nationalteam = st.selectbox("Nationalteam", ["yes", "no"])
-        vintage = birthdate.year
-        full_name = f"{first_name} {last_name}"
-        category = get_category_from_testyear(vintage, datetime.date.today().year)
-
-        if st.button("Athlet speichern"):
-            # Prüfen, ob Athlet bereits existiert
-            existing = supabase.table('athletes').select('id').eq('first_name', first_name.strip())\
-                .eq('last_name', last_name.strip())\
-                .eq('birthdate', birthdate.strftime('%Y-%m-%d')).execute().data
-            if existing:
-                st.error(f"Athlet {full_name} mit Geburtsdatum {birthdate.strftime('%Y-%m-%d')} existiert bereits!")
-            else:
-                supabase.table('athletes').insert({
-                    'first_name': first_name,
-                    'last_name': last_name,
-                    'birthdate': birthdate.strftime('%Y-%m-%d'),
-                    'sex': sex,
-                    'club': club,
-                    'nationalteam': nationalteam,
-                    'vintage': vintage,
-                    'full_name': full_name,
-                    'category': category
-                }).execute()
-                st.success(f"Athlet {full_name} gespeichert!")
-
+        athleten_eingeben()
     elif selected == "Athleten importieren":
         import_athletes()
     elif selected == "Athleten bearbeiten":
