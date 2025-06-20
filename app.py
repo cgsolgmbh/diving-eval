@@ -1200,7 +1200,7 @@ def bewertung_wettkampf():
             jem, jem_pct, jem_nt = get_status(jem_row, jem_qual, points)
             em, em_pct, em_nt = get_status(em_row, em_qual, points)
             wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points)
-            regional, regional_pct, regional_nt = get_status(regional_row, regional_qual, points)
+            regional, regional_pct, regional_nt = get_status_regio(regional_row, regional_qual, points)
 
             nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
 
