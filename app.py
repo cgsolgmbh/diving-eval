@@ -775,18 +775,6 @@ def manage_scoretable():
 def import_athletes():
     st.header("📥 Athleten importieren")
 
-    if st.button("🔄 Bioage für alle Athleten berechnen und speichern"):
-    athletes = supabase.table("athletes").select("id, birthdate").execute().data
-    updated = 0
-    for a in athletes:
-        birthdate = a.get("birthdate")
-        athlete_id = a.get("id")
-        bioage = get_birth_quarter(birthdate)
-        if bioage and athlete_id:
-            supabase.table("athletes").update({"bioage": bioage}).eq("id", athlete_id).execute()
-            updated += 1
-    st.success(f"Bioage für {updated} Athleten aktualisiert!")
-
     uploaded_file = st.file_uploader("CSV-Datei mit Athletendaten hochladen", type="csv")
 
     # 📄 Beispiel-CSV zum Herunterladen anbieten
@@ -854,6 +842,18 @@ def import_athletes():
             st.dataframe(pd.DataFrame(skipped_duplicates))
 
         st.success(f"✅ {inserted} Athleten erfolgreich importiert.")
+
+        if st.button("🔄 Bioage für alle Athleten berechnen und speichern"):
+        athletes = supabase.table("athletes").select("id, birthdate").execute().data
+        updated = 0
+        for a in athletes:
+            birthdate = a.get("birthdate")
+            athlete_id = a.get("id")
+            bioage = get_birth_quarter(birthdate)
+            if bioage and athlete_id:
+                supabase.table("athletes").update({"bioage": bioage}).eq("id", athlete_id).execute()
+                updated += 1
+        st.success(f"Bioage für {updated} Athleten aktualisiert!")
 
 def delete_athlete():
     st.header("🗑️ Athlet löschen")
