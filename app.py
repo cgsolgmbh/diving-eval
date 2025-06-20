@@ -1112,7 +1112,7 @@ def bewertung_wettkampf():
         except Exception:
             return None
 
-    # Hilfsfunktion für Status
+    # Hilfsfunktion für Status Nationalkader
     def get_status(selection_row, qual_flag, points):
         if selection_row.empty:
             return "no", "", "no"
@@ -1124,6 +1124,19 @@ def bewertung_wettkampf():
             status = "no"
         national = "yes" if percentage >= 90 else "no"
         return status, f"{percentage}%", national
+
+    # Hilfsfunktion für Status Regionalteam
+    def get_status_regio(selection_row, qual_flag, points):
+        if selection_row.empty:
+            return "no", "", "no"
+        limit = float(selection_row.iloc[0]['points'])
+        percentage = round((points / limit) * 100, 1)
+        if qual_flag:
+            status = "yes" if points >= limit else "no"
+        else:
+            status = "no"
+        regional = "yes" if percentage >= 70 else "no"
+        return status, f"{percentage}%", regional
 
     # Button für ALLE berechnen
     if st.button("🔄 Alle Wettkampfbewertungen berechnen"):
@@ -3068,6 +3081,48 @@ def referenztabellen_anzeigen():
             st.info("Keine Piste Points für PisteTotalinPoints gefunden.")
     else:
         st.info("Disziplin 'PisteTotalinPoints' nicht gefunden.")
+
+    # --- CompPerfEnhance (Leistungsentwicklung) ---
+    st.subheader("📈 Leistungsentwicklung (CompPerfEnhance)")
+    comp_perf_enhance_id = None
+    if not pistedisciplines.empty:
+        comp_perf_enhance_id = pistedisciplines[pistedisciplines["name"] == "CompPerfEnhance"]["id"].iloc[0]
+    if comp_perf_enhance_id:
+        enhance_df = pd.DataFrame(fetch_all_rows("scoretables", select="*", discipline_id=comp_perf_enhance_id))
+        if not enhance_df.empty:
+            enhance_df = enhance_df.sort_values("result_min")
+            show_cols = ["category", "sex", "result_min", "result_max", "points"]
+            for col in show_cols:
+                if col not in enhance_df.columns:
+                    enhance_df[col] = None
+            enhance_df = enhance_df[show_cols]
+            st.dataframe(enhance_df)
+            st.download_button("📥 Leistungsentwicklung als CSV", enhance_df.to_csv(index=False, encoding='utf-8-sig'), file_name="leistungsentwicklung.csv", mime="text/csv")
+        else:
+            st.info("Keine Daten für CompPerfEnhance gefunden.")
+    else:
+        st.info("Disziplin 'CompPerfEnhance' nicht gefunden.")
+
+    # --- CompPerfPointsCalc (Wettkampf Performance) ---
+    st.subheader("🏅 Wettkampf Performance (CompPerfPointsCalc)")
+    comp_perf_points_id = None
+    if not pistedisciplines.empty:
+        comp_perf_points_id = pistedisciplines[pistedisciplines["name"] == "CompPerfPointsCalc"]["id"].iloc[0]
+    if comp_perf_points_id:
+        perf_points_df = pd.DataFrame(fetch_all_rows("scoretables", select="*", discipline_id=comp_perf_points_id))
+        if not perf_points_df.empty:
+            perf_points_df = perf_points_df.sort_values("result_min")
+            show_cols = ["category", "sex", "result_min", "result_max", "points"]
+            for col in show_cols:
+                if col not in perf_points_df.columns:
+                    perf_points_df[col] = None
+            perf_points_df = perf_points_df[show_cols]
+            st.dataframe(perf_points_df)
+            st.download_button("📥 Wettkampf Performance als CSV", perf_points_df.to_csv(index=False, encoding='utf-8-sig'), file_name="wettkampf_performance.csv", mime="text/csv")
+        else:
+            st.info("Keine Daten für CompPerfPointsCalc gefunden.")
+    else:
+        st.info("Disziplin 'CompPerfPointsCalc' nicht
 
 def athleten_eingeben():
     st.header("📝 Neuen Athleten hinzufügen")
