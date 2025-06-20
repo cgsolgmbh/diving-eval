@@ -3082,7 +3082,7 @@ def referenztabellen_anzeigen():
     else:
         st.info("Disziplin 'PisteTotalinPoints' nicht gefunden.")
 
-    # --- CompPerfEnhance (Leistungsentwicklung) ---
+# --- CompPerfEnhance (Leistungsentwicklung) ---
     st.subheader("📈 Leistungsentwicklung (CompPerfEnhance)")
     comp_perf_enhance_id = None
     if not pistedisciplines.empty:
@@ -3122,7 +3122,28 @@ def referenztabellen_anzeigen():
         else:
             st.info("Keine Daten für CompPerfPointsCalc gefunden.")
     else:
-        st.info("Disziplin 'CompPerfPointsCalc' nicht
+        st.info("Disziplin 'CompPerfPointsCalc' nicht gefunden.")
+
+    # --- CompPerfQualityCalc (Sprung Qualität) ---
+    st.subheader("🤸 Sprung Qualität (CompPerfQualityCalc)")
+    comp_perf_quality_id = None
+    if not pistedisciplines.empty:
+        comp_perf_quality_id = pistedisciplines[pistedisciplines["name"] == "CompPerfQualityCalc"]["id"].iloc[0]
+    if comp_perf_quality_id:
+        perf_quality_df = pd.DataFrame(fetch_all_rows("scoretables", select="*", discipline_id=comp_perf_quality_id))
+        if not perf_quality_df.empty:
+            perf_quality_df = perf_quality_df.sort_values("result_min")
+            show_cols = ["category", "sex", "result_min", "result_max", "points"]
+            for col in show_cols:
+                if col not in perf_quality_df.columns:
+                    perf_quality_df[col] = None
+            perf_quality_df = perf_quality_df[show_cols]
+            st.dataframe(perf_quality_df)
+            st.download_button("📥 Sprung Qualität als CSV", perf_quality_df.to_csv(index=False, encoding='utf-8-sig'), file_name="sprung_qualitaet.csv", mime="text/csv")
+        else:
+            st.info("Keine Daten für CompPerfQualityCalc gefunden.")
+    else:
+        st.info("Disziplin 'CompPerfQualityCalc' nicht gefunden.")
 
 def athleten_eingeben():
     st.header("📝 Neuen Athleten hinzufügen")
