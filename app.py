@@ -318,21 +318,20 @@ def get_category_from_agecategories(vintage, pisteyear, agecategories):
     return None
 
 def get_birth_quarter(birthdate):
-    # birthdate als String: "YYYY-MM-DD" oder datetime.date
-    if isinstance(birthdate, str):
-        try:
+    try:
+        if isinstance(birthdate, str):
             birthdate = pd.to_datetime(birthdate)
-        except Exception:
-            return None
-    month = birthdate.month
-    if 1 <= month <= 3:
-        return "q1"
-    elif 4 <= month <= 6:
-        return "q2"
-    elif 7 <= month <= 9:
-        return "q3"
-    elif 10 <= month <= 12:
-        return "q4"
+        month = birthdate.month
+        if 1 <= month <= 3:
+            return "q1"
+        elif 4 <= month <= 6:
+            return "q2"
+        elif 7 <= month <= 9:
+            return "q3"
+        elif 10 <= month <= 12:
+            return "q4"
+    except Exception as e:
+        return None
     return None
 
 # Punkteberechnung
