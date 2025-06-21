@@ -806,7 +806,7 @@ def import_athletes():
     }])
     st.download_button(
         label="📄 Beispiel-CSV herunterladen",
-        data=sample_df.to_csv(index=False).encode("utf-8"),
+        data=sample_df.to_csv(index=False).encode("utf-8-sig"),
         file_name="athleten_beispiel.csv",
         mime="text/csv"
     )
