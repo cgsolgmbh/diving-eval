@@ -2618,6 +2618,16 @@ def show_full_piste_results_soc():
         mime="text/csv"
     )
 
+    import io
+
+    # XLSX-Export
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        filtered.to_excel(writer, index=False, sheet_name="Full PISTE Results SOC")
+    output.seek(0)
+    st.download_button(
+        "📥
+
     # --- Grafik: Kurve und Durchschnittswert für Totalpunkte ---
     if not filtered.empty and "totalpoints" in filtered.columns:
         df_plot = filtered.copy()
