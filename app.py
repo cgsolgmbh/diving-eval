@@ -2618,8 +2618,6 @@ def show_full_piste_results_soc():
         mime="text/csv"
     )
 
-    import io
-
     # XLSX-Export
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
