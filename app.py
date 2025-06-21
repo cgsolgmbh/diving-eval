@@ -2624,7 +2624,11 @@ def show_full_piste_results_soc():
         filtered.to_excel(writer, index=False, sheet_name="Full PISTE Results SOC")
     output.seek(0)
     st.download_button(
-        "📥
+        "📥 Gefilterte Ergebnisse als Excel",
+        output.getvalue(),
+        file_name="full_piste_results_soc.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
     # --- Grafik: Kurve und Durchschnittswert für Totalpunkte ---
     if not filtered.empty and "totalpoints" in filtered.columns:
