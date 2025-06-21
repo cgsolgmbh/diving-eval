@@ -2618,8 +2618,13 @@ def show_full_piste_results_soc():
         mime="text/csv"
     )
 
-    # XLSX-Export
+    import io
 
+    # XLSX-Export
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        filtered.to_excel(writer, index=False, sheet_name="Full PISTE Results SOC")
+    output.seek(0)
     st.download_button(
         "📥 Gefilterte Ergebnisse als Excel",
         output.getvalue(),
