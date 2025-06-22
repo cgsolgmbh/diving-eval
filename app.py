@@ -2470,8 +2470,9 @@ def soc_full_calculation():
                 first_name, last_name, year = key
                 relevant_results_regio = [
                     r for r in compresults_regio
-                    if r['first_name'].strip().lower() == first_name.strip().lower()
-                    and r['last_name'].strip().lower() == last_name.strip().lower()
+                    if isinstance(r, dict)
+                    and r.get('first_name', '').strip().lower() == first_name.strip().lower()
+                    and r.get('last_name', '').strip().lower() == last_name.strip().lower()
                     and r.get('Competition') in comp_names
                     and str(r.get('RegionalTeam') or '').strip().lower() == 'yes'
                 ]
