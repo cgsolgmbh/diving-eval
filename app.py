@@ -1125,19 +1125,6 @@ def bewertung_wettkampf():
         national = "yes" if percentage >= 90 else "no"
         return status, f"{percentage}%", national
 
-    # Hilfsfunktion für Status Regionalteam
-    def get_status_regio(selection_row, qual_flag, points):
-        if selection_row.empty:
-            return "no", "", "no"
-        limit = float(selection_row.iloc[0]['points'])
-        percentage = round((points / limit) * 100, 1)
-        if qual_flag:
-            status = "yes" if points >= limit else "no"
-        else:
-            status = "no"
-        regional = "yes" if percentage >= 70 else "no"
-        return status, f"{percentage}%", regional
-
     # Button für ALLE berechnen
     if st.button("🔄 Alle Wettkampfbewertungen berechnen"):
         comp_results = fetch_all_rows('compresults')
@@ -1190,35 +1177,16 @@ def bewertung_wettkampf():
             jem_row = relevant_selection[relevant_selection['Competition'] == "JEM"]
             em_row = relevant_selection[relevant_selection['Competition'] == "EM"]
             wm_row = relevant_selection[relevant_selection['Competition'] == "WM"]
-            regional_row = relevant_selection[relevant_selection['Competition'] == "Regional"]
 
             jem_qual = bool(comp_row.get("qual-JEM", False))
             em_qual = bool(comp_row.get("qual-EM", False))
             wm_qual = bool(comp_row.get("qual-WM", False))
-            regional_qual = bool(comp_row.get("qual-Regional", False))
 
             jem, jem_pct, jem_nt = get_status(jem_row, jem_qual, points)
             em, em_pct, em_nt = get_status(em_row, em_qual, points)
             wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points)
 
-            # Nur für Jugend A und B RegionalTeam berechnen
-            if str(category).strip().lower() in ["jugend a", "jugend b"]:
-                regional, regional_pct, regional_nt = get_status_regio(regional_row, regional_qual, points)
-            else:
-                regional = None  # oder "" falls du ein leeres Feld willst
-
-            # NationalTeam wie gehabt
             nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
-
-            # RegionalTeam: 70%-Logik analog, aber mit Prozentwerten
-            regionalteam = "no"
-            for pct in [jem_pct, em_pct, wm_pct]:
-                try:
-                    if float(str(pct).replace("%", "")) >= 70:
-                        regionalteam = "yes"
-                        break
-                except Exception:
-                    continue
 
             supabase.table('compresults').update({
                 "JEM": jem,
@@ -1228,7 +1196,6 @@ def bewertung_wettkampf():
                 "WM": wm,
                 "WM%": safe_numeric(wm_pct),
                 "NationalTeam": nationalteam,
-                "RegionalTeam": regionalteam,
                 "AveragePoints": average_points,
                 "timestamp": now_str
             }).eq("id", comp_id).execute()
@@ -1291,24 +1258,7 @@ def bewertung_wettkampf():
             em, em_pct, em_nt = get_status(em_row, em_qual, points)
             wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points)
             
-            # Nur für Jugend A und B RegionalTeam berechnen
-            if str(category).strip().lower() in ["jugend a", "jugend b"]:
-                regional, regional_pct, regional_nt = get_status_regio(regional_row, regional_qual, points)
-            else:
-                regional = None  # oder "" falls du ein leeres Feld willst
-
-            # NationalTeam wie gehabt
             nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
-
-            # RegionalTeam: 70%-Logik analog, aber mit Prozentwerten
-            regionalteam = "no"
-            for pct in [jem_pct, em_pct, wm_pct]:
-                try:
-                    if float(str(pct).replace("%", "")) >= 70:
-                        regionalteam = "yes"
-                        break
-                except Exception:
-                    continue
 
             supabase.table('compresults').update({
                 "JEM": jem,
@@ -1318,7 +1268,6 @@ def bewertung_wettkampf():
                 "WM": wm,
                 "WM%": safe_numeric(wm_pct),
                 "NationalTeam": nationalteam,
-                "RegionalTeam": regionalteam,
                 "AveragePoints": average_points,
                 "timestamp": now_str
             }).eq("id", comp_id).execute()
@@ -2970,7 +2919,6 @@ def selektionen_wettkaempfe():
 
     selektionstypen = {
         "Nationalkader": "NationalTeam",
-        "Regionalkader": "RegionalTeam",
         "JEM": "JEM",
         "EM": "EM",
         "WM": "WM"
