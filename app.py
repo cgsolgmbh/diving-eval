@@ -1558,6 +1558,25 @@ def piste_refpoint_wettkampf_analyse():
             }).eq("id", row["id"]).execute()
             updated += 1
 
+            # --- RegionalTeam und NationalTeam setzen ---
+            category = row.get("CategoryStart", "").strip().lower()
+            # Wert aus PisteRefPoints{selected_year}%
+            regionalteam = "yes" if percent is not None and percent >= 70 else "no"
+
+            # Schreibe RegionalTeam für alle
+            supabase.table('compresults').update({
+                "RegionalTeam": regionalteam
+            }).eq("id", row["id"]).execute()
+
+            # Für Jugend C/D (außer 3m synchro und Turm synchro): NationalTeam auf yes, wenn >=90%
+            if category in ["jugend c", "jugend d"]:
+                discipline = row.get("Discipline", "").strip().lower()
+                if discipline not in ["3m synchro", "turm synchro"]:
+                    nationalteam = "yes" if percent is not None and percent >= 90 else "no"
+                    supabase.table('compresults').update({
+                        "NationalTeam": nationalteam
+                    }).eq("id", row["id"]).execute()
+
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
     # ... im Top3-Abschnitt:
