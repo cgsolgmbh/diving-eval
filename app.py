@@ -2461,7 +2461,7 @@ def soc_full_calculation():
                     and r.get('first_name', '').strip().lower() == first_name.strip().lower()
                     and r.get('last_name', '').strip().lower() == last_name.strip().lower()
                     and r.get('Competition') in comp_names
-                    and str(r.get('RegionalTeam', '')).lower() == 'yes'
+                    and str(r.get('RegionalTeam') or '').lower() == 'yes'
                 ]
                 athlete_data_map[key]["CompPointsRegionalTeam"] = "yes" if relevant_results_regio else "no"
 
