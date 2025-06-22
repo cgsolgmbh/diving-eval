@@ -2452,19 +2452,6 @@ def soc_full_calculation():
                 # Wert als "yes"/"no" speichern
                 athlete_data_map[key]["CompPointsNationalTeam"] = "yes" if relevant_results else "no"
 
-                compresults_regio = fetch_all_rows('compresults', select='first_name, last_name, Competition, RegionalTeam')
-                for key in athlete_data_map:
-                    first_name, last_name, year = key
-                    relevant_results_regio = [
-                        r for r in compresults_regio
-                        if isinstance(r, dict)
-                        and r.get('first_name', '').strip().lower() == first_name.strip().lower()
-                        and r.get('last_name', '').strip().lower() == last_name.strip().lower()
-                        and r.get('Competition') in comp_names
-                        and str(r.get('RegionalTeam') or '').lower() == 'yes'
-                    ]
-                    athlete_data_map[key]["CompPointsRegionalTeam"] = "yes" if relevant_results_regio else "no"
-
             # CompPointsRegionalTeam setzen, falls RegionalTeam=yes in compresults für das Jahr ---
 
             st.write("compresults_regio example:", compresults_regio[:3])
@@ -2475,7 +2462,7 @@ def soc_full_calculation():
                 and r.get('first_name', '').strip().lower() == first_name.strip().lower()
                 and r.get('last_name', '').strip().lower() == last_name.strip().lower()
                 and r.get('Competition') in comp_names
-                and str(r.get('RegionalTeam', '')).lower() == 'yes'
+                and str(r.get('RegionalTeam') or '').strip().lower() == 'yes'
             ]
 
             compresults_regio = fetch_all_rows('compresults', select='first_name, last_name, Competition, RegionalTeam')
@@ -2486,7 +2473,7 @@ def soc_full_calculation():
                     if r['first_name'].strip().lower() == first_name.strip().lower()
                     and r['last_name'].strip().lower() == last_name.strip().lower()
                     and r.get('Competition') in comp_names
-                    and r.get('RegionalTeam', '').lower() == 'yes'
+                    and str(r.get('RegionalTeam') or '').strip().lower() == 'yes'
                 ]
                 athlete_data_map[key]["CompPointsRegionalTeam"] = "yes" if relevant_results_regio else "no"
 
