@@ -1228,7 +1228,7 @@ def bewertung_wettkampf():
                 "WM": wm,
                 "WM%": safe_numeric(wm_pct),
                 "NationalTeam": nationalteam,
-                "RegionalTeam": RegionalTeam,
+                "RegionalTeam": regionalteam,
                 "AveragePoints": average_points,
                 "timestamp": now_str
             }).eq("id", comp_id).execute()
@@ -1318,7 +1318,7 @@ def bewertung_wettkampf():
                 "WM": wm,
                 "WM%": safe_numeric(wm_pct),
                 "NationalTeam": nationalteam,
-                "RegionalTeam": RegionalTeam,
+                "RegionalTeam": regionalteam,
                 "AveragePoints": average_points,
                 "timestamp": now_str
             }).eq("id", comp_id).execute()
