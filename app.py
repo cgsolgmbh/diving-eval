@@ -2454,8 +2454,6 @@ def soc_full_calculation():
 
             # CompPointsRegionalTeam setzen, falls RegionalTeam=yes in compresults für das Jahr ---
 
-            st.write("compresults_regio example:", compresults_regio[:3])
-
             relevant_results_regio = [
                 r for r in compresults_regio
                 if isinstance(r, dict)
