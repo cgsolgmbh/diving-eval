@@ -2466,6 +2466,9 @@ def soc_full_calculation():
                 athlete_data_map[key]["CompPointsRegionalTeam"] = "yes" if relevant_results_regio else "no"
 
         # CompPointsRegionalTeam setzen, falls RegionalTeam=yes in compresults für das Jahr ---
+
+        st.write("compresults_regio example:", compresults_regio[:3])
+
         relevant_results_regio = [
             r for r in compresults_regio
             if isinstance(r, dict)
