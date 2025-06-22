@@ -2481,6 +2481,57 @@ def soc_full_calculation():
             # Wert als "yes"/"no" speichern
             athlete_data_map[key]["CompPointsNationalTeam"] = "yes" if relevant_results else "no"
 
+        # --- CompPointsRegionalTeam setzen ---
+        compresults_all = fetch_all_rows('compresults')  # Hole alle Felder, nicht nur NationalTeam!
+        df_compresults = pd.DataFrame(compresults_all)
+
+        for key in athlete_data_map:
+            first_name, last_name, year = key
+            category = athlete_data_map[key].get("Category", "").strip().lower()
+            comp_points_regio = None
+
+            # Jugend A/B: Wert aus compresults.RegionalTeam
+            if category in ["jugend a", "jugend b"]:
+                relevant_results = df_compresults[
+                    (df_compresults['first_name'].str.strip().str.lower() == first_name.strip().lower()) &
+                    (df_compresults['last_name'].str.strip().str.lower() == last_name.strip().lower()) &
+                    (df_compresults['PisteYear'].astype(str) == str(year))
+                ]
+                # Wenn mind. ein Wettkampf mit RegionalTeam == "yes", dann "yes", sonst "no"
+                if not relevant_results.empty and (relevant_results["RegionalTeam"].str.lower() == "yes").any():
+                    comp_points_regio = "yes"
+                else:
+                    comp_points_regio = "no"
+
+            # Jugend C/D: Berechnung über PisteRefPoints{year}%
+            elif category in ["jugend c", "jugend d"]:
+                colname = f"PisteRefPoints{year}%"
+                relevant_results = df_compresults[
+                    (df_compresults['first_name'].str.strip().str.lower() == first_name.strip().lower()) &
+                    (df_compresults['last_name'].str.strip().str.lower() == last_name.strip().lower()) &
+                    (df_compresults['PisteYear'].astype(str) == str(year))
+                ]
+                # Prüfe, ob Spalte existiert und Wert >= 70
+                if not relevant_results.empty and colname in relevant_results.columns:
+                    vals = pd.to_numeric(relevant_results[colname], errors="coerce")
+                    if vals.notnull().any():
+                        comp_points_regio = "yes" if (vals >= 70).any() else "no"
+                        # Optional: Schreibe Wert auch gleich in compresults.RegionalTeam
+                        for idx in relevant_results.index:
+                            supabase.table("compresults").update({
+                                "RegionalTeam": comp_points_regio
+                            }).eq("id", df_compresults.loc[idx, "id"]).execute()
+                    else:
+                        comp_points_regio = None
+                else:
+                    comp_points_regio = None
+
+            # Sonst: None
+            else:
+                comp_points_regio = None
+
+            athlete_data_map[key]["CompPointsRegionalTeam"] = comp_points_regio
+
         # --- Jetzt alle Daten in socadditionalvalues schreiben ---
         inserted = 0
         for key, data in athlete_data_map.items():
@@ -2608,7 +2659,7 @@ def show_full_piste_results_soc():
         "first_name", "last_name", "Category", "sex", "PisteYear",
         "competitions", "trainingperf", "piste", "compenhancement",
         "resilience", "trainingtime", "trainingsince", "toolenvironment",
-        "quality", "bioagevalue", "mirwaldvalue", "totalpoints", "pisteminregio", "pisteminnational", "CompPointsNationalTeam", "talentcard"
+        "quality", "bioagevalue", "mirwaldvalue", "totalpoints", "pisteminregio", "pisteminnational", "CompPointsNationalTeam", "CompPointsRegionalTeam", "talentcard"
     ]
     # Füge fehlende Spalten als leere Spalten hinzu (für robustes Verhalten)
     for col in show_cols:
