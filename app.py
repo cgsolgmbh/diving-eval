@@ -2554,19 +2554,22 @@ def soc_full_calculation():
         for key, data in athlete_data_map.items():
             # Hole aktuelle Werte aus socadditionalvalues
             row = supabase.table("socadditionalvalues").select(
-                "pisteminregio", "pisteminnational", "CompPointsNationalTeam"
+                "pisteminregio", "pisteminnational", "CompPointsNationalTeam", "CompPointsRegionalTeam"
             ).eq("first_name", data['first_name'])\
-             .eq("last_name", data['last_name'])\
-             .eq("PisteYear", data['PisteYear']).execute().data
+            .eq("last_name", data['last_name'])\
+            .eq("PisteYear", data['PisteYear']).execute().data
+
             if not row:
                 continue
+
             pisteminregio = str(row[0].get("pisteminregio", "")).lower()
             pisteminnational = str(row[0].get("pisteminnational", "")).lower()
             comp_points_nt = str(row[0].get("CompPointsNationalTeam", "")).lower()
+            comp_points_regio = str(row[0].get("CompPointsRegionalTeam", "")).lower()
 
             if pisteminnational == "yes" and comp_points_nt == "yes":
                 talentcard = "National"
-            elif pisteminregio == "yes":
+            elif pisteminregio == "yes" and comp_points_regio == "yes":
                 talentcard = "Regional"
             else:
                 talentcard = "noCard"
@@ -2574,8 +2577,8 @@ def soc_full_calculation():
             supabase.table("socadditionalvalues").update({
                 "talentcard": talentcard
             }).eq("first_name", data['first_name'])\
-              .eq("last_name", data['last_name'])\
-              .eq("PisteYear", data['PisteYear']).execute()
+            .eq("last_name", data['last_name'])\
+            .eq("PisteYear", data['PisteYear']).execute()
 
         st.success(f"Berechnung abgeschlossen. {inserted} Einträge für {selected_year} aktualisiert.")
 
