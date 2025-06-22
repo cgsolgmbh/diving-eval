@@ -1558,21 +1558,24 @@ def piste_refpoint_wettkampf_analyse():
             }).eq("id", row["id"]).execute()
             updated += 1
 
-            # --- RegionalTeam und NationalTeam setzen ---
-            category = row.get("CategoryStart", "").strip().lower()
-            # Wert aus PisteRefPoints{selected_year}%
-            regionalteam = "yes" if percent is not None and percent >= 70 else "no"
+            # Hole die Wettkampf-Zeile aus competitions
+            comp_row = next((c for c in competitions if c['Name'] == competition_name), {})
 
-            # Schreibe RegionalTeam für alle
+            category = row.get("CategoryStart", "").strip().lower()
+            discipline = row.get("Discipline", "").strip().lower()
+
+            # --- RegionalTeam: qual-Regional muss TRUE sein ---
+            regional_qual = bool(comp_row.get("qual-Regional", False))
+            regionalteam = "yes" if regional_qual and percent is not None and percent >= 70 else "no"
             supabase.table('compresults').update({
                 "RegionalTeam": regionalteam
             }).eq("id", row["id"]).execute()
 
-            # Für Jugend C/D (außer 3m synchro und Turm synchro): NationalTeam auf yes, wenn >=90%
+            # --- NationalTeam für Jugend C/D: qual-National muss TRUE sein (außer Synchro) ---
             if category in ["jugend c", "jugend d"]:
-                discipline = row.get("Discipline", "").strip().lower()
+                national_qual = bool(comp_row.get("qual-National", False))
                 if discipline not in ["3m synchro", "turm synchro"]:
-                    nationalteam = "yes" if percent is not None and percent >= 90 else "no"
+                    nationalteam = "yes" if national_qual and percent is not None and percent >= 90 else "no"
                     supabase.table('compresults').update({
                         "NationalTeam": nationalteam
                     }).eq("id", row["id"]).execute()
