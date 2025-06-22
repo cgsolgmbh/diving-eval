@@ -2463,7 +2463,7 @@ def soc_full_calculation():
                 and r.get('Competition') in comp_names
                 and r.get('RegionalTeam', '').lower() == 'yes'
             ]
-            athlete_data_map[key]["CompPointsRegionalTeam"] = "yes" if
+            athlete_data_map[key]["CompPointsRegionalTeam"] = "yes" if relevant_results_regio else "no"
 
         # --- Jetzt alle Daten in socadditionalvalues schreiben ---
         inserted = 0
