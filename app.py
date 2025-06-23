@@ -1296,6 +1296,19 @@ def bewertung_wettkampf():
             }).eq("id", comp_id).execute()
         st.success("Neue Einträge wurden berechnet!")
 
+    # Button zum Zurücksetzen aller Timestamps (nur für Tests)
+    with st.expander("🧪 Test-Tools: Timestamp zurücksetzen"):
+        if st.button("❌ Alle Timestamps in compresults zurücksetzen"):
+            try:
+                comp_results = fetch_all_rows("compresults")
+                for row in comp_results:
+                    supabase.table("compresults").update({
+                        "timestamp": None
+                    }).eq("id", row["id"]).execute()
+                st.success("Alle Timestamps wurden zurückgesetzt.")
+            except Exception as e:
+                st.error(f"Fehler beim Zurücksetzen: {e}")
+
 def auswertung_wettkampf():
     st.header("🏅 Wettkampfauswertungen")
 
