@@ -1488,116 +1488,118 @@ def piste_refpoint_wettkampf_analyse():
     years = [str(y) for y in range(2024, 2031)]
     selected_year = st.selectbox("Jahr für Analyse wählen", years)
 
-    if st.button("Full Analyse"):
-        st.info("Starte: Berechnen ...")
-        selected_year_int = int(selected_year)
-        competitions = supabase.table('competitions').select('Name, PisteYear').execute().data
-        compresults = supabase.table('compresults').select('*').execute().data
-        athletes = supabase.table('athletes').select('id, vintage, first_name, last_name').execute().data
-        pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
+if st.button("Full Analyse"):
+    st.info("Starte: Berechnen ...")
+    selected_year_int = int(selected_year)
 
-        comp_lookup = {c['Name']: c.get('PisteYear') for c in competitions}
-        athlete_vintage = {a['id']: a['vintage'] for a in athletes}
-        athlete_name_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a['vintage'] for a in athletes}
-        refpoints_df = pd.DataFrame(pisterefcomppoints)
+    competitions = supabase.table('competitions').select('Name, PisteYear, qual-Regional, qual-National').execute().data
+    compresults = supabase.table('compresults').select('*').execute().data
+    athletes = supabase.table('athletes').select('id, vintage, first_name, last_name').execute().data
+    pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
 
-        updated = 0
-        for row in compresults:
-            competition_name = row.get("Competition")
-            piste_year = comp_lookup.get(competition_name)
-            if str(piste_year) != selected_year:
-                continue
+    comp_lookup = {c['Name']: c.get('PisteYear') for c in competitions}
+    comp_qual_lookup = {c['Name']: c for c in competitions}
+    athlete_vintage = {a['id']: a['vintage'] for a in athletes}
+    athlete_name_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a['vintage'] for a in athletes}
+    refpoints_df = pd.DataFrame(pisterefcomppoints)
 
-            athlete_id = row.get("athlete_id")
-            vintage = None
-            if athlete_id and athlete_id in athlete_vintage:
-                vintage = athlete_vintage[athlete_id]
-            else:
-                first = row.get("first_name", "").strip().lower()
-                last = row.get("last_name", "").strip().lower()
-                vintage = athlete_name_lookup.get((first, last))
-            if not vintage:
-                continue
+    updated = 0
 
-            try:
-                age = selected_year_int - int(vintage)
-            except Exception:
-                continue
-            if not (9 <= age <= 19):
-                continue
+    for row in compresults:
+        competition_name = row.get("Competition")
+        piste_year = comp_lookup.get(competition_name)
+        comp_row = comp_qual_lookup.get(competition_name, {})
+        is_current_year = str(piste_year) == selected_year
 
-            discipline = row.get("Discipline")
-            sex = row.get("sex")
-            points = row.get("Points")
-            if not (discipline and sex and points):
-                continue
+        athlete_id = row.get("athlete_id")
+        vintage = None
+        if athlete_id and athlete_id in athlete_vintage:
+            vintage = athlete_vintage[athlete_id]
+        else:
+            first = row.get("first_name", "").strip().lower()
+            last = row.get("last_name", "").strip().lower()
+            vintage = athlete_name_lookup.get((first, last))
+        if not vintage:
+            continue
 
-            # --- AUSSCHLUSS HIER ---
-            if is_excluded_discipline_local(discipline, age, selected_year, agecat_df):
-                continue
+        try:
+            age = selected_year_int - int(vintage)
+        except Exception:
+            continue
+        if not (9 <= age <= 19):
+            continue
 
-            ref_row = refpoints_df[
-                (refpoints_df["Discipline"].astype(str).str.lower() == str(discipline).lower()) &
-                (refpoints_df["sex"].astype(str).str.lower() == str(sex).lower())
-            ]
-            if ref_row.empty or str(age) not in ref_row.columns:
-                continue
+        discipline = row.get("Discipline")
+        sex = row.get("sex")
+        points = row.get("Points")
+        if not (discipline and sex and points):
+            continue
 
-            ref_value = ref_row.iloc[0][str(age)]
-            try:
-                ref_value = float(ref_value)
-                points_val = float(points)
-                percent = round((points_val / ref_value) * 100, 1) if ref_value else None
-            except Exception:
-                percent = None
-                continue
+        if is_excluded_discipline_local(discipline, age, selected_year, agecat_df):
+            continue
 
+        ref_row = refpoints_df[
+            (refpoints_df["Discipline"].astype(str).str.lower() == str(discipline).lower()) &
+            (refpoints_df["sex"].astype(str).str.lower() == str(sex).lower())
+        ]
+        if ref_row.empty or str(age) not in ref_row.columns:
+            continue
+
+        ref_value = ref_row.iloc[0][str(age)]
+        try:
+            ref_value = float(ref_value)
+            points_val = float(points)
+            percent = round((points_val / ref_value) * 100, 1) if ref_value else None
+        except Exception:
+            percent = None
+            continue
+
+        # ✅ Nur für das aktuelle Jahr schreiben
+        if is_current_year:
             colname = f"PisteRefPoints{selected_year}%"
             supabase.table('compresults').update({
                 colname: percent
             }).eq("id", row["id"]).execute()
             updated += 1
 
-            # Hole die Wettkampf-Zeile aus competitions
-            comp_row = next((c for c in competitions if c['Name'] == competition_name), {})
+        # 🟩 RegionalTeam prüfen
+        category = row.get("CategoryStart", "").strip().lower()
+        discipline_lower = discipline.strip().lower()
 
-            category = row.get("CategoryStart", "").strip().lower()
-            discipline = row.get("Discipline", "").strip().lower()
+        val = comp_row.get("qual-Regional", "")
+        regional_qual = (
+            isinstance(val, bool) and val is True
+        ) or (
+            str(val).strip().lower() in ["true", "yes", "1"]
+        )
 
-            # --- RegionalTeam: qual-Regional muss TRUE sein ---
-            val = comp_row.get("qual-Regional", "")
-            regional_qual = (
-                isinstance(val, bool) and val is True
+        excluded_synchro = (
+            category in ["jugend c", "jugend d"] and
+            discipline_lower in ["1m synchro", "3m synchro", "platform synchro"]
+        )
+
+        if regional_qual and not excluded_synchro:
+            regionalteam = "yes" if percent is not None and percent >= 70 else "no"
+            supabase.table('compresults').update({
+                "RegionalTeam": regionalteam
+            }).eq("id", row["id"]).execute()
+
+        # 🟦 NationalTeam prüfen (nur Jugend C/D)
+        if category in ["jugend c", "jugend d"]:
+            val_nat = comp_row.get("qual-National", "")
+            national_qual = (
+                isinstance(val_nat, bool) and val_nat is True
             ) or (
-                str(val).strip().lower() in ["true", "yes", "1"]
+                str(val_nat).strip().lower() in ["true", "yes", "1"]
             )
-
-            excluded_synchro = (
-                category in ["jugend c", "jugend d"] and
-                discipline in ["1m synchro", "3m synchro", "platform synchro"]
-            )
-
-            if regional_qual and not excluded_synchro:
-                regionalteam = "yes" if percent is not None and percent >= 70 else "no"
+            if discipline_lower not in ["3m synchro", "turm synchro"]:
+                nationalteam = "yes" if national_qual and percent is not None and percent >= 90 else "no"
                 supabase.table('compresults').update({
-                    "RegionalTeam": regionalteam
+                    "NationalTeam": nationalteam
                 }).eq("id", row["id"]).execute()
 
-            # --- NationalTeam für Jugend C/D: qual-National muss TRUE sein (außer Synchro) ---
-            if category in ["jugend c", "jugend d"]:
-                val_nat = comp_row.get("qual-National", "")
-                national_qual = (
-                    isinstance(val_nat, bool) and val_nat is True
-                ) or (
-                    str(val_nat).strip().lower() in ["true", "yes", "1"]
-                )
-                if discipline not in ["3m synchro", "turm synchro"]:
-                    nationalteam = "yes" if national_qual and percent is not None and percent >= 90 else "no"
-                    supabase.table('compresults').update({
-                        "NationalTeam": nationalteam
-                    }).eq("id", row["id"]).execute()
+    st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
-        st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
     # ... im Top3-Abschnitt:
     ref_col = f"PisteRefPoints{selected_year}%"
