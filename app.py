@@ -1565,7 +1565,12 @@ def piste_refpoint_wettkampf_analyse():
             discipline = row.get("Discipline", "").strip().lower()
 
             # --- RegionalTeam: qual-Regional muss TRUE sein ---
-            regional_qual = bool(comp_row.get("qual-Regional", False))
+            val = comp_row.get("qual-Regional", "")
+            regional_qual = (
+                isinstance(val, bool) and val is True
+            ) or (
+                str(val).strip().lower() in ["true", "yes", "1"]
+            )
 
             excluded_synchro = (
                 category in ["jugend c", "jugend d"] and
@@ -1580,7 +1585,12 @@ def piste_refpoint_wettkampf_analyse():
 
             # --- NationalTeam für Jugend C/D: qual-National muss TRUE sein (außer Synchro) ---
             if category in ["jugend c", "jugend d"]:
-                national_qual = bool(comp_row.get("qual-National", False))
+                val_nat = comp_row.get("qual-National", "")
+                national_qual = (
+                    isinstance(val_nat, bool) and val_nat is True
+                ) or (
+                    str(val_nat).strip().lower() in ["true", "yes", "1"]
+                )
                 if discipline not in ["3m synchro", "turm synchro"]:
                     nationalteam = "yes" if national_qual and percent is not None and percent >= 90 else "no"
                     supabase.table('compresults').update({
