@@ -1260,6 +1260,28 @@ def bewertung_wettkampf():
             
             nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
 
+            # --- RegionalTeam: qual-Regional muss TRUE sein UND mindestens 70 % erreicht ---
+            # Nur berechnen, wenn wir auch Referenzdaten haben
+            ref_row = relevant_selection[relevant_selection["Competition"] == "Regional"]
+            regional_pct = None
+            if not ref_row.empty and 'value' in ref_row.columns:
+                try:
+                    ref_val = float(ref_row.iloc[0]['value'])
+                    percent = round((float(points) / ref_val) * 100, 1) if ref_val else None
+                    regional_pct = percent
+                except:
+                    pass
+
+            excluded_synchro = (
+                str(category).strip().lower() in ["jugend c", "jugend d"] and
+                str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
+            )
+
+            regionalteam = "no"
+            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= 70:
+                regionalteam = "yes"
+
+
             supabase.table('compresults').update({
                 "JEM": jem,
                 "JEM%": safe_numeric(jem_pct),
@@ -1268,6 +1290,7 @@ def bewertung_wettkampf():
                 "WM": wm,
                 "WM%": safe_numeric(wm_pct),
                 "NationalTeam": nationalteam,
+                "RegionalTeam": regionalteam,
                 "AveragePoints": average_points,
                 "timestamp": now_str
             }).eq("id", comp_id).execute()
