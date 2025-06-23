@@ -1112,7 +1112,6 @@ def bewertung_wettkampf():
         except Exception:
             return None
 
-    # Hilfsfunktion für Status Nationalkader
     def get_status(selection_row, qual_flag, points):
         if selection_row.empty:
             return "no", "", "no"
@@ -1125,7 +1124,6 @@ def bewertung_wettkampf():
         national = "yes" if percentage >= 90 else "no"
         return status, f"{percentage}%", national
 
-    # Button für ALLE berechnen
     if st.button("🔄 Alle Wettkampfbewertungen berechnen"):
         comp_results = fetch_all_rows('compresults')
         df_results = pd.DataFrame(comp_results)
@@ -1140,7 +1138,6 @@ def bewertung_wettkampf():
             points = row["Points"]
             competition_name = row["Competition"]
 
-            # dives holen
             dives = None
             if all(col in df_agedives.columns for col in ['sex', 'category', 'Discipline', 'dives']):
                 dives_row = df_agedives[
@@ -1150,13 +1147,11 @@ def bewertung_wettkampf():
                 ]
                 dives = dives_row.iloc[0]['dives'] if not dives_row.empty else None
 
-            # Debug-Ausgaben einbauen:
             if dives is None:
                 st.warning(f"Keine dives für {sex}, {category}, {discipline}")
             if points in (None, "", "nan"):
                 st.warning(f"Keine Punkte für {row}")
 
-            # AveragePoints berechnen
             average_points = None
             try:
                 points_val = float(points)
@@ -1201,7 +1196,6 @@ def bewertung_wettkampf():
             }).eq("id", comp_id).execute()
         st.success("Alle Wettkampfbewertungen wurden neu berechnet!")
 
-    # Button für NUR neue Einträge berechnen
     if st.button("🔄 Nur neue Einträge berechnen"):
         comp_results = fetch_all_rows('compresults')
         df_results = pd.DataFrame([r for r in comp_results if not r.get("timestamp")])
@@ -1216,7 +1210,6 @@ def bewertung_wettkampf():
             points = row["Points"]
             competition_name = row["Competition"]
 
-            # dives holen
             dives = None
             if all(col in df_agedives.columns for col in ['sex', 'category', 'Discipline', 'dives']):
                 dives_row = df_agedives[
@@ -1226,7 +1219,6 @@ def bewertung_wettkampf():
                 ]
                 dives = dives_row.iloc[0]['dives'] if not dives_row.empty else None
 
-            # AveragePoints berechnen
             average_points = None
             try:
                 points_val = float(points)
@@ -1257,8 +1249,27 @@ def bewertung_wettkampf():
             jem, jem_pct, jem_nt = get_status(jem_row, jem_qual, points)
             em, em_pct, em_nt = get_status(em_row, em_qual, points)
             wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points)
-            
+
             nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
+
+            # RegionalTeam-Berechnung
+            regional_pct = None
+            regionalteam = "no"
+            if not regional_row.empty and 'value' in regional_row.columns:
+                try:
+                    ref_val = float(regional_row.iloc[0]['value'])
+                    percent = round((float(points) / ref_val) * 100, 1) if ref_val else None
+                    regional_pct = percent
+                except:
+                    pass
+
+            excluded_synchro = (
+                str(category).strip().lower() in ["jugend c", "jugend d"] and
+                str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
+            )
+
+            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= 70:
+                regionalteam = "yes"
 
             supabase.table('compresults').update({
                 "JEM": jem,
@@ -1268,10 +1279,23 @@ def bewertung_wettkampf():
                 "WM": wm,
                 "WM%": safe_numeric(wm_pct),
                 "NationalTeam": nationalteam,
+                "RegionalTeam": regionalteam,
                 "AveragePoints": average_points,
                 "timestamp": now_str
             }).eq("id", comp_id).execute()
         st.success("Neue Einträge wurden berechnet!")
+
+    # TESTTOOL: Timestamps zurücksetzen
+    with st.expander("🧪 Test-Tools"):
+        if st.button("❌ Alle Timestamps in compresults zurücksetzen"):
+            try:
+                comp_results = fetch_all_rows("compresults")
+                for row in comp_results:
+                    supabase.table("compresults").update({"timestamp": None}).eq("id", row["id"]).execute()
+                st.success("Alle Timestamps wurden zurückgesetzt.")
+            except Exception as e:
+                st.error(f"Fehler beim Zurücksetzen: {e}")
+
 
 def auswertung_wettkampf():
     st.header("🏅 Wettkampfauswertungen")
