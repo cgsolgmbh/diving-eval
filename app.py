@@ -1565,7 +1565,7 @@ def piste_refpoint_wettkampf_analyse():
             discipline = row.get("Discipline", "").strip().lower()
 
             # --- RegionalTeam: qual-Regional muss TRUE sein ---
-            regional_qual = bool(comp_row.get("qual-Regional", False))
+            regional_qual = str(comp_row.get("qual-Regional", "")).strip().lower() == "yes"
             regionalteam = "yes" if regional_qual and percent is not None and percent >= 70 else "no"
             supabase.table('compresults').update({
                 "RegionalTeam": regionalteam
