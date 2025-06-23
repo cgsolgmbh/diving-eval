@@ -1565,11 +1565,18 @@ def piste_refpoint_wettkampf_analyse():
             discipline = row.get("Discipline", "").strip().lower()
 
             # --- RegionalTeam: qual-Regional muss TRUE sein ---
-            regional_qual = str(comp_row.get("qual-Regional", "")).strip().lower() == "yes"
-            regionalteam = "yes" if regional_qual and percent is not None and percent >= 70 else "no"
-            supabase.table('compresults').update({
-                "RegionalTeam": regionalteam
-            }).eq("id", row["id"]).execute()
+            regional_qual = bool(comp_row.get("qual-Regional", False))
+
+            excluded_synchro = (
+                category in ["jugend c", "jugend d"] and
+                discipline in ["1m synchro", "3m synchro", "platform synchro"]
+            )
+
+            if regional_qual and not excluded_synchro:
+                regionalteam = "yes" if percent is not None and percent >= 70 else "no"
+                supabase.table('compresults').update({
+                    "RegionalTeam": regionalteam
+                }).eq("id", row["id"]).execute()
 
             # --- NationalTeam für Jugend C/D: qual-National muss TRUE sein (außer Synchro) ---
             if category in ["jugend c", "jugend d"]:
