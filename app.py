@@ -1778,7 +1778,8 @@ def piste_refpoint_wettkampf_analyse():
                 quality = round(sum(quality_vals) / len(quality_vals), 1) if quality_vals else None
                 supabase.table("pisterefcompresults").update({"quality": quality})\
                     .eq("first_name", this_year_row.iloc[0]["first_name"])\
-                    .eq("last_name", this_
+                    .eq("last_name", this_year_row.iloc[0]["last_name"])\
+                    .eq("PisteYear", int(selected_year)).execute()
 
 def show_top3_wettkaempfe():
     st.header("🏆 Top 3 Wettkämpfe pro Athlet und Jahr")
