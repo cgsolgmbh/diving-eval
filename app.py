@@ -1582,6 +1582,7 @@ def piste_refpoint_wettkampf_analyse():
         competitions = supabase.table('competitions').select('Name, Date, PisteYear, qual-Regional, qual-National').execute().data
         comp_qual_lookup = {c['Name']: c for c in competitions}
         compresults = supabase.table('compresults').select('*').execute().data
+        st.write("Spalten in compresults:", compresults[0].keys())
         athletes = supabase.table('athletes').select('id, vintage, first_name, last_name').execute().data
         pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
 
@@ -1640,6 +1641,7 @@ def piste_refpoint_wettkampf_analyse():
             ref_value = get_ref_value(refpoints_df, discipline, sex, age)
             percent = calculate_percent(points, ref_value)
             if ref_value is None:
+                st.write("Kein RefValue:", discipline, sex, age, row)
                 continue
 
             if is_current_year:
@@ -1829,6 +1831,7 @@ def piste_refpoint_wettkampf_analyse():
                 if is_excluded_discipline_local(discipline, agecat_df=agecat_df):
                     continue
                 if not (discipline and sex and avg_points and age):
+                    st.write("Fehlende Werte:", discipline, sex, points, row)
                     continue
 
                 ref_row = refcomppoints_df[
