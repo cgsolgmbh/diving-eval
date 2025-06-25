@@ -1497,11 +1497,14 @@ def safe_numeric(val):
 
 def get_ref_value(ref_df, discipline, sex, age, ref_col_prefix=""):
     try:
+        st.write("Disziplin/Sex/Alter:", discipline, sex, age)
+        st.write("Spaltennamen:", ref_df.columns.tolist())
+        st.write("Disziplinen im DataFrame:", ref_df["Discipline"].unique())
+        st.write("Geschlechter im DataFrame:", ref_df["sex"].unique())
         filtered = ref_df[
             (ref_df["Discipline"].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
             (ref_df["sex"].astype(str).str.strip().str.lower() == str(sex).strip().lower())
         ]
-        st.write("Disziplin/Sex/Alter:", discipline, sex, age)
         st.write("Gefilterte Zeile:", filtered)
         ref_col = f"{ref_col_prefix}{int(age)}" if ref_col_prefix else str(int(age))
         st.write("Suche Spalte:", ref_col, "in", filtered.columns.tolist())
