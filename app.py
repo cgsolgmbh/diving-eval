@@ -1599,7 +1599,8 @@ def piste_refpoint_wettkampf_analyse():
         selected_year_int = int(selected_year)
 
         # --- Daten laden ---
-        competitions = supabase.table('competitions').select('Name, PisteYear, qual-Regional, qual-National').execute().data
+        competitions = supabase.table('competitions').select('Name, Date, PisteYear, qual-Regional, qual-National').execute().data
+        comp_qual_lookup = {c['Name']: c for c in competitions}
         compresults = supabase.table('compresults').select('*').execute().data
         athletes = supabase.table('athletes').select('id, vintage, first_name, last_name').execute().data
         pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
@@ -1616,9 +1617,14 @@ def piste_refpoint_wettkampf_analyse():
         # --- Berechnung & Updates für jeden Wettkampf-Resultat-Row ---
         for row in compresults:
             competition_name = row.get("Competition")
-            piste_year = comp_lookup.get(competition_name)
+            # Hole das Wettkampfdatum
             comp_row = comp_qual_lookup.get(competition_name, {})
-            is_current_year = str(piste_year) == selected_year
+            comp_date = comp_row.get("Date")
+            if comp_date:
+                comp_year = int(str(comp_date)[:4])
+            else:
+                # Fallback: PisteYear oder selected_year_int
+                comp_year = comp_row.get("PisteYear") or selected_year_int
 
             athlete_id = row.get("athlete_id")
             vintage = athlete_vintage.get(athlete_id)
@@ -1631,11 +1637,13 @@ def piste_refpoint_wettkampf_analyse():
                 continue
 
             try:
-                age = selected_year_int - int(vintage)
+                age = int(comp_year) - int(vintage)
             except Exception:
                 continue
             if not (9 <= age <= 19):
                 continue
+
+            # ... Rest wie gehabt ...
 
             discipline = row.get("Discipline")
             sex = row.get("sex")
