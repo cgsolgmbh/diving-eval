@@ -1524,7 +1524,7 @@ def calculate_percent(points, ref_value):
 def piste_refpoint_wettkampf_analyse():
     st.header("📊 Piste RefPoint Wettkampf Analyse")
 
-    # Lade die agecategories-Tabelle EINMAL am Anfang der Funktion:
+    # Lade agecategories einmal am Anfang
     agecategories = supabase.table("agecategories").select("*").execute().data
     agecat_df = pd.DataFrame(agecategories)
 
@@ -1543,11 +1543,13 @@ def piste_refpoint_wettkampf_analyse():
         st.info("Starte: Berechnen ...")
         selected_year_int = int(selected_year)
 
+        # --- Daten laden ---
         competitions = supabase.table('competitions').select('Name, PisteYear, qual-Regional, qual-National').execute().data
         compresults = supabase.table('compresults').select('*').execute().data
         athletes = supabase.table('athletes').select('id, vintage, first_name, last_name').execute().data
         pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
 
+        # --- Lookup-Tabellen ---
         comp_lookup = {c['Name']: c.get('PisteYear') for c in competitions}
         comp_qual_lookup = {c['Name']: c for c in competitions}
         athlete_vintage = {a['id']: a['vintage'] for a in athletes}
@@ -1556,6 +1558,7 @@ def piste_refpoint_wettkampf_analyse():
 
         updated = 0
 
+        # --- Berechnung & Updates für jeden Wettkampf-Resultat-Row ---
         for row in compresults:
             competition_name = row.get("Competition")
             piste_year = comp_lookup.get(competition_name)
@@ -1585,7 +1588,9 @@ def piste_refpoint_wettkampf_analyse():
             if not (discipline and sex and points):
                 continue
 
-            if is_excluded_discipline_local(discipline, age, selected_year, agecat_df):
+            # Hier nur discipline und category (nicht age, nicht df) an is_excluded_discipline_local übergeben
+            category = row.get("CategoryStart", "").strip().lower()
+            if is_excluded_discipline_local(discipline, category):
                 continue
 
             ref_value = get_ref_value(refpoints_df, discipline, sex, age)
@@ -1601,14 +1606,13 @@ def piste_refpoint_wettkampf_analyse():
                 }).eq("id", row["id"]).execute()
                 updated += 1
 
-            category = row.get("CategoryStart", "").strip().lower()
-            discipline_lower = discipline.strip().lower()
             val = comp_row.get("qual-Regional", "")
             regional_qual = (
                 isinstance(val, bool) and val is True
             ) or (
                 str(val).strip().lower() in ["true", "yes", "1"]
             )
+            discipline_lower = discipline.strip().lower()
             excluded_synchro = (
                 category in ["jugend c", "jugend d"] and
                 discipline_lower in ["1m synchro", "3m synchro", "platform synchro"]
@@ -1634,24 +1638,32 @@ def piste_refpoint_wettkampf_analyse():
 
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
-    # --- Top-3-Wettkämpfe & AveragePoints ---
-# Erzeuge athlete_rows aus compresults
-    athlete_rows = []
-    for row in compresults:
-        athlete = f"{row.get('first_name', '').strip().lower()} {row.get('last_name', '').strip().lower()}"
-        discipline = row.get("Discipline")
-        result = to_float(row.get("Points"))
-        reference_value = get_ref_value(refpoints_df, discipline, row.get("sex"), selected_year_int - int(athlete_vintage.get(row.get("athlete_id"), 0)))
-        year = comp_lookup.get(row.get("Competition"))
-        if result and reference_value and year:
-            athlete_rows.append({
-                "athlete": athlete,
-                "discipline": discipline,
-                "result": result,
-                "reference_value": reference_value,
-                "year": int(year),
-            })
+        # --- Hier jetzt athlete_rows definieren ---
+        athlete_rows = []
+        for row in compresults:
+            athlete = f"{row.get('first_name', '').strip().lower()} {row.get('last_name', '').strip().lower()}"
+            discipline = row.get("Discipline")
+            result = to_float(row.get("Points"))
+            athlete_id = row.get("athlete_id")
+            vintage = athlete_vintage.get(athlete_id, 0)
+            reference_value = get_ref_value(refpoints_df, discipline, row.get("sex"), selected_year_int - int(vintage))
+            year = comp_lookup.get(row.get("Competition"))
+            category = row.get("CategoryStart", "").strip().lower()
+
+            if result and reference_value and year:
+                athlete_rows.append({
+                    "athlete": athlete,
+                    "discipline": discipline,
+                    "result": result,
+                    "reference_value": reference_value,
+                    "year": int(year),
+                    "category": category,
+                })
+
+        # --- Top-3-Wettkämpfe & AveragePoints (Beispiel) ---
         athlete_top3 = {}
+        output = []  # Hier wird das Ergebnis gespeichert
+
         for row in athlete_rows:
             athlete = row["athlete"]
             discipline = row["discipline"]
@@ -1674,9 +1686,10 @@ def piste_refpoint_wettkampf_analyse():
                     "ref": ref,
                 })
 
-        # Berechne AveragePoints (Mittelwert Top 3 RefPoints)
+        # Mittelwert Top 3
         for athlete, disciplines in athlete_top3.items():
             for discipline, performances in disciplines.items():
+                # Kategorie hier aus athlete_rows, oder anpassen, falls gebraucht
                 if is_excluded_discipline_local(discipline):
                     continue
 
@@ -1700,6 +1713,10 @@ def piste_refpoint_wettkampf_analyse():
                         "averagepoints": averagepoints,
                         "pointsaverageref%": averagepoints / refaverage * 100 if refaverage else None
                     })
+
+        # ... Rest der Logik für Entwicklung, DiveQuality usw. folgt hier, wie gehabt ...
+
+
 
         # --- Leistungsentwicklung ("Entwicklung") ---
         # Gruppiere RefAverages nach Athlet, Disziplin und Jahr
