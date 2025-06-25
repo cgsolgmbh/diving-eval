@@ -1634,55 +1634,55 @@ def piste_refpoint_wettkampf_analyse():
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
     # --- Top-3-Wettkämpfe & AveragePoints ---
-athlete_top3 = {}
-for row in athlete_rows:
-    athlete = row["athlete"]
-    discipline = row["discipline"]
-    result = to_float(row["result"])
-    ref = to_float(row["reference_value"])
-    year = to_int(row["year"])
+        athlete_top3 = {}
+        for row in athlete_rows:
+            athlete = row["athlete"]
+            discipline = row["discipline"]
+            result = to_float(row["result"])
+            ref = to_float(row["reference_value"])
+            year = to_int(row["year"])
 
-    if athlete not in athlete_top3:
-        athlete_top3[athlete] = {}
+            if athlete not in athlete_top3:
+                athlete_top3[athlete] = {}
 
-    if discipline not in athlete_top3[athlete]:
-        athlete_top3[athlete][discipline] = []
+            if discipline not in athlete_top3[athlete]:
+                athlete_top3[athlete][discipline] = []
 
-    if ref and result:
-        refpoints = result / ref * 100
-        athlete_top3[athlete][discipline].append({
-            "year": year,
-            "refpoints": refpoints,
-            "result": result,
-            "ref": ref,
-        })
+            if ref and result:
+                refpoints = result / ref * 100
+                athlete_top3[athlete][discipline].append({
+                    "year": year,
+                    "refpoints": refpoints,
+                    "result": result,
+                    "ref": ref,
+                })
 
-# Berechne AveragePoints (Mittelwert Top 3 RefPoints)
-for athlete, disciplines in athlete_top3.items():
-    for discipline, performances in disciplines.items():
-        if is_excluded_discipline_local(discipline):
-            continue
+        # Berechne AveragePoints (Mittelwert Top 3 RefPoints)
+        for athlete, disciplines in athlete_top3.items():
+            for discipline, performances in disciplines.items():
+                if is_excluded_discipline_local(discipline):
+                    continue
 
-        top3 = sorted(performances, key=lambda x: x["refpoints"], reverse=True)[:3]
-        if len(top3) == 3:
-            averagepoints = mean([p["refpoints"] for p in top3])
-            refaverage = mean([p["ref"] for p in top3])
-            results = [p["result"] for p in top3]
-            years = [p["year"] for p in top3]
+                top3 = sorted(performances, key=lambda x: x["refpoints"], reverse=True)[:3]
+                if len(top3) == 3:
+                    averagepoints = mean([p["refpoints"] for p in top3])
+                    refaverage = mean([p["ref"] for p in top3])
+                    results = [p["result"] for p in top3]
+                    years = [p["year"] for p in top3]
 
-            output.append({
-                "athlete": athlete,
-                "discipline": discipline,
-                "refaverage": refaverage,
-                "result1": results[0],
-                "result2": results[1],
-                "result3": results[2],
-                "year1": years[0],
-                "year2": years[1],
-                "year3": years[2],
-                "averagepoints": averagepoints,
-                "pointsaverageref%": averagepoints / refaverage * 100 if refaverage else None
-            })
+                    output.append({
+                        "athlete": athlete,
+                        "discipline": discipline,
+                        "refaverage": refaverage,
+                        "result1": results[0],
+                        "result2": results[1],
+                        "result3": results[2],
+                        "year1": years[0],
+                        "year2": years[1],
+                        "year3": years[2],
+                        "averagepoints": averagepoints,
+                        "pointsaverageref%": averagepoints / refaverage * 100 if refaverage else None
+                    })
 
         # --- Leistungsentwicklung ("Entwicklung") ---
         # Gruppiere RefAverages nach Athlet, Disziplin und Jahr
