@@ -1640,7 +1640,6 @@ def piste_refpoint_wettkampf_analyse():
             ref_value = get_ref_value(refpoints_df, discipline, sex, age)
             percent = calculate_percent(points, ref_value)
             if ref_value is None:
-                st.write("Kein Referenzwert:", discipline, sex, age)
                 continue
 
             if is_current_year:
