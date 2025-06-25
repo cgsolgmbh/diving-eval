@@ -1497,24 +1497,16 @@ def safe_numeric(val):
 
 def get_ref_value(ref_df, discipline, sex, age, ref_col_prefix=""):
     try:
-        st.write("Disziplin/Sex/Alter:", discipline, sex, age)
-        st.write("Spaltennamen:", ref_df.columns.tolist())
-        st.write("Disziplinen im DataFrame:", ref_df["Discipline"].unique())
-        st.write("Geschlechter im DataFrame:", ref_df["sex"].unique())
         filtered = ref_df[
             (ref_df["Discipline"].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
             (ref_df["sex"].astype(str).str.strip().str.lower() == str(sex).strip().lower())
         ]
-        st.write("Gefilterte Zeile:", filtered)
         ref_col = f"{ref_col_prefix}{int(age)}" if ref_col_prefix else str(int(age))
-        st.write("Suche Spalte:", ref_col, "in", filtered.columns.tolist())
         if filtered.empty or ref_col not in filtered.columns:
             return None
         val = filtered.iloc[0][ref_col]
-        st.write("Gefundener Wert:", val)
         return float(val) if val not in (None, "", "nan") else None
     except Exception as e:
-        st.write("Fehler in get_ref_value:", e)
         return None
 
 
@@ -1650,7 +1642,7 @@ def piste_refpoint_wettkampf_analyse():
             if ref_value is None:
                 st.write("Kein Referenzwert:", discipline, sex, age)
                 continue
-            
+
             if is_current_year:
                 colname = f"PisteRefPoints{selected_year}%"
                 supabase.table('compresults').update({
