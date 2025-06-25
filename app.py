@@ -1555,24 +1555,6 @@ def is_excluded_discipline_local(discipline, category=None):
     excluded = ["training", "test"]
     return discipline in excluded
 
-# Beispiel-Implementierung, anpassen nach deinen Daten
-def get_ref_value(refpoints_df, discipline, sex, age):
-    if refpoints_df.empty:
-        return None
-    discipline = str(discipline).strip().lower()
-    sex = str(sex).strip().lower()
-    try:
-        row = refpoints_df[
-            (refpoints_df["Discipline"].str.lower() == discipline) &
-            (refpoints_df["sex"].str.lower() == sex) &
-            (refpoints_df["age"] == age)
-        ]
-        if not row.empty:
-            return float(row.iloc[0]["ref_value"])  # Spaltenname anpassen
-    except Exception:
-        return None
-    return None
-
 def calculate_percent(points, ref_value):
     if not points or not ref_value:
         return None
