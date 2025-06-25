@@ -1544,6 +1544,7 @@ def piste_refpoint_wettkampf_analyse():
                 last = row.get("last_name", "").strip().lower()
                 vintage = athlete_name_lookup.get((first, last))
             if not vintage:
+                st.write("Kein vintage:", row)
                 continue
 
             try:
@@ -1567,6 +1568,7 @@ def piste_refpoint_wettkampf_analyse():
                 (refpoints_df["sex"].astype(str).str.lower() == str(sex).lower())
             ]
             if ref_row.empty or str(age) not in ref_row.columns:
+                st.write("Kein Referenzwert:", discipline, sex, age)
                 continue
 
             ref_value = ref_row.iloc[0][str(age)]
