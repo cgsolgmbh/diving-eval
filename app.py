@@ -1633,29 +1633,29 @@ def piste_refpoint_wettkampf_analyse():
 
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
-    # --- Top-3-Wettkämpfe & AveragePoints ---
-        athlete_top3 = {}
-        for row in athlete_rows:
-            athlete = row["athlete"]
-            discipline = row["discipline"]
-            result = to_float(row["result"])
-            ref = to_float(row["reference_value"])
-            year = to_int(row["year"])
+        # --- Top-3-Wettkämpfe & AveragePoints ---
+            athlete_top3 = {}
+            for row in athlete_rows:
+                athlete = row["athlete"]
+                discipline = row["discipline"]
+                result = to_float(row["result"])
+                ref = to_float(row["reference_value"])
+                year = to_int(row["year"])
 
-            if athlete not in athlete_top3:
-                athlete_top3[athlete] = {}
+                if athlete not in athlete_top3:
+                    athlete_top3[athlete] = {}
 
-            if discipline not in athlete_top3[athlete]:
-                athlete_top3[athlete][discipline] = []
+                if discipline not in athlete_top3[athlete]:
+                    athlete_top3[athlete][discipline] = []
 
-            if ref and result:
-                refpoints = result / ref * 100
-                athlete_top3[athlete][discipline].append({
-                    "year": year,
-                    "refpoints": refpoints,
-                    "result": result,
-                    "ref": ref,
-                })
+                if ref and result:
+                    refpoints = result / ref * 100
+                    athlete_top3[athlete][discipline].append({
+                        "year": year,
+                        "refpoints": refpoints,
+                        "result": result,
+                        "ref": ref,
+                    })
 
         # Berechne AveragePoints (Mittelwert Top 3 RefPoints)
         for athlete, disciplines in athlete_top3.items():
@@ -1684,38 +1684,38 @@ def piste_refpoint_wettkampf_analyse():
                         "pointsaverageref%": averagepoints / refaverage * 100 if refaverage else None
                     })
 
-        # --- Leistungsentwicklung ("Entwicklung") ---
-        # Gruppiere RefAverages nach Athlet, Disziplin und Jahr
-        dev_data = {}
-        for row in output:
-            athlete = row["athlete"]
-            discipline = row["discipline"]
-            year = row["year1"]  # alle Top3-Leistungen sind im gleichen Jahr oder nah dran
-            refavg = row.get("refaverage")
+            # --- Leistungsentwicklung ("Entwicklung") ---
+            # Gruppiere RefAverages nach Athlet, Disziplin und Jahr
+            dev_data = {}
+            for row in output:
+                athlete = row["athlete"]
+                discipline = row["discipline"]
+                year = row["year1"]  # alle Top3-Leistungen sind im gleichen Jahr oder nah dran
+                refavg = row.get("refaverage")
 
-            if not refavg:
-                continue
+                if not refavg:
+                    continue
 
-            key = (athlete, discipline)
-            if key not in dev_data:
-                dev_data[key] = []
-            dev_data[key].append((year, refavg))
+                key = (athlete, discipline)
+                if key not in dev_data:
+                    dev_data[key] = []
+                dev_data[key].append((year, refavg))
 
-        # Entwicklung berechnen (RefAverage Jahr vs. Vorjahr)
-        for (athlete, discipline), year_data in dev_data.items():
-            sorted_years = sorted(year_data, key=lambda x: x[0])
-            for i in range(1, len(sorted_years)):
-                year_now, ref_now = sorted_years[i]
-                year_prev, ref_prev = sorted_years[i - 1]
+            # Entwicklung berechnen (RefAverage Jahr vs. Vorjahr)
+            for (athlete, discipline), year_data in dev_data.items():
+                sorted_years = sorted(year_data, key=lambda x: x[0])
+                for i in range(1, len(sorted_years)):
+                    year_now, ref_now = sorted_years[i]
+                    year_prev, ref_prev = sorted_years[i - 1]
 
-                if ref_prev:
-                    entwicklung = ref_now / ref_prev * 100
-                    output.append({
-                        "athlete": athlete,
-                        "discipline": discipline,
-                        "jahr": year_now,
-                        "entwicklung": entwicklung
-                    })
+                    if ref_prev:
+                        entwicklung = ref_now / ref_prev * 100
+                        output.append({
+                            "athlete": athlete,
+                            "discipline": discipline,
+                            "jahr": year_now,
+                            "entwicklung": entwicklung
+                        })
 
             # DiveQuality-Berechnung
             refcomppoints_df = pd.DataFrame(supabase.table("pisterefcomppoints").select("*").execute().data)
