@@ -1650,7 +1650,7 @@ def piste_refpoint_wettkampf_analyse():
             if ref_value is None:
                 st.write("Kein Referenzwert:", discipline, sex, age)
                 continue
-
+            
             if is_current_year:
                 colname = f"PisteRefPoints{selected_year}%"
                 supabase.table('compresults').update({
