@@ -56,11 +56,12 @@ def get_official_category_local(age, year, agecat_df):
         return row.iloc[0]["category"]
     return None
 
-def is_excluded_discipline_local(discipline, age, year, agecat_df):
-    category = get_official_category_local(age, year, agecat_df)
+def is_excluded_discipline_local(discipline, category):
+    excluded_disciplines = ["1m synchro", "3m synchro", "platform synchro"]
+    excluded_categories = ["jugend c", "jugend d"]
     return (
-        str(discipline).strip().lower() in ["1m synchro", "3m synchro"]
-        and category in ["Jugend C", "Jugend D"]
+        str(discipline).strip().lower() in excluded_disciplines and
+        str(category).strip().lower() in excluded_categories
     )
 
 def get_pistedisciplines():
@@ -1634,6 +1635,22 @@ def piste_refpoint_wettkampf_analyse():
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
     # --- Top-3-Wettkämpfe & AveragePoints ---
+# Erzeuge athlete_rows aus compresults
+    athlete_rows = []
+    for row in compresults:
+        athlete = f"{row.get('first_name', '').strip().lower()} {row.get('last_name', '').strip().lower()}"
+        discipline = row.get("Discipline")
+        result = to_float(row.get("Points"))
+        reference_value = get_ref_value(refpoints_df, discipline, row.get("sex"), selected_year_int - int(athlete_vintage.get(row.get("athlete_id"), 0)))
+        year = comp_lookup.get(row.get("Competition"))
+        if result and reference_value and year:
+            athlete_rows.append({
+                "athlete": athlete,
+                "discipline": discipline,
+                "result": result,
+                "reference_value": reference_value,
+                "year": int(year),
+            })
         athlete_top3 = {}
         for row in athlete_rows:
             athlete = row["athlete"]
