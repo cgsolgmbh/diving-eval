@@ -1501,14 +1501,17 @@ def get_ref_value(ref_df, discipline, sex, age, ref_col_prefix=""):
             (ref_df["Discipline"].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
             (ref_df["sex"].astype(str).str.strip().str.lower() == str(sex).strip().lower())
         ]
-        if filtered.empty:
-            return None
+        st.write("Disziplin/Sex/Alter:", discipline, sex, age)
+        st.write("Gefilterte Zeile:", filtered)
         ref_col = f"{ref_col_prefix}{int(age)}" if ref_col_prefix else str(int(age))
-        if ref_col not in filtered.columns:
+        st.write("Suche Spalte:", ref_col, "in", filtered.columns.tolist())
+        if filtered.empty or ref_col not in filtered.columns:
             return None
         val = filtered.iloc[0][ref_col]
+        st.write("Gefundener Wert:", val)
         return float(val) if val not in (None, "", "nan") else None
-    except Exception:
+    except Exception as e:
+        st.write("Fehler in get_ref_value:", e)
         return None
 
 
