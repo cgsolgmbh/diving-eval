@@ -1674,6 +1674,8 @@ def piste_refpoint_wettkampf_analyse():
                 })
                 continue
 
+            is_current_year = str(comp_year) == selected_year
+
             # ✅ Nur für das aktuelle Jahr schreiben
             if is_current_year:
                 colname = f"PisteRefPoints{selected_year}%"
