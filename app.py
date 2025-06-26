@@ -1523,7 +1523,7 @@ def piste_refpoint_wettkampf_analyse():
     - und die Entwicklung (Vergleich zum Vorjahr), **sofern mindestens für das angegebene Jahr und das Jahr davor Daten vorhanden sind**.
     """)
 
-    years = [str(y) for y in range(2024, 2031)]
+    years = [str(y) for y in range(2023, 2031)]
     selected_year = st.selectbox("Jahr für Analyse wählen", years)
 
     if st.button("Full Analyse"):
