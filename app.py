@@ -1557,6 +1557,8 @@ def piste_refpoint_wettkampf_analyse():
                 vintage = athlete_name_lookup.get((first, last))
             if not vintage:
                 st.write({
+                    "first_name": row.get("first_name"),
+                    "last_name": row.get("last_name"),
                     "competition": competition_name,
                     "discipline": discipline,
                     "sex": sex,
@@ -1574,6 +1576,8 @@ def piste_refpoint_wettkampf_analyse():
                 age = int(comp_year) - int(vintage)
             except Exception:
                 st.write({
+                    "first_name": row.get("first_name"),
+                    "last_name": row.get("last_name"),
                     "competition": competition_name,
                     "discipline": discipline,
                     "sex": sex,
@@ -1588,6 +1592,8 @@ def piste_refpoint_wettkampf_analyse():
                 continue
             if not (8 <= age <= 19):
                 st.write({
+                    "first_name": row.get("first_name"),
+                    "last_name": row.get("last_name"),
                     "competition": competition_name,
                     "discipline": discipline,
                     "sex": sex,
@@ -1606,6 +1612,8 @@ def piste_refpoint_wettkampf_analyse():
             points = row.get("Points")
             if not (discipline and sex and points):
                 st.write({
+                    "first_name": row.get("first_name"),
+                    "last_name": row.get("last_name"),
                     "competition": competition_name,
                     "discipline": discipline,
                     "sex": sex,
@@ -1621,6 +1629,8 @@ def piste_refpoint_wettkampf_analyse():
 
             if is_excluded_discipline_local(discipline, age, selected_year, agecat_df):
                 st.write({
+                    "first_name": row.get("first_name"),
+                    "last_name": row.get("last_name"),
                     "competition": competition_name,
                     "discipline": discipline,
                     "sex": sex,
@@ -1640,6 +1650,8 @@ def piste_refpoint_wettkampf_analyse():
             ]
             if ref_row.empty or str(age) not in ref_row.columns:
                 st.write({
+                    "first_name": row.get("first_name"),
+                    "last_name": row.get("last_name"),
                     "competition": competition_name,
                     "discipline": discipline,
                     "sex": sex,
@@ -1661,6 +1673,8 @@ def piste_refpoint_wettkampf_analyse():
             except Exception:
                 percent = None
                 st.write({
+                    "first_name": row.get("first_name"),
+                    "last_name": row.get("last_name"),
                     "competition": competition_name,
                     "discipline": discipline,
                     "sex": sex,
