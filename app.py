@@ -1560,11 +1560,11 @@ def piste_refpoint_wettkampf_analyse():
                     "sex": sex,
                     "points": points,
                     "age": age,
-                    "ref_row_empty": ref_row.empty,
-                    "ref_row_columns": ref_row.columns.tolist() if not ref_row.empty else [],
-                    "ref_value": ref_row.iloc[0][str(age)] if not ref_row.empty and str(age) in ref_row.columns else None,
+                    "ref_row_empty": ref_row.empty if ref_row is not None else None,
+                    "ref_row_columns": ref_row.columns.tolist() if ref_row is not None and not ref_row.empty else [],
+                    "ref_value": ref_row.iloc[0][str(age)] if ref_row is not None and not ref_row.empty and str(age) in ref_row.columns else None,
                     "row_id": row.get("id"),
-                    "reason": "ref_row empty or age not in columns" if ref_row.empty or str(age) not in ref_row.columns else "other"
+                    "reason": "vintage fehlt"
                 })
                 continue
 
@@ -1577,11 +1577,11 @@ def piste_refpoint_wettkampf_analyse():
                     "sex": sex,
                     "points": points,
                     "age": age,
-                    "ref_row_empty": ref_row.empty,
-                    "ref_row_columns": ref_row.columns.tolist() if not ref_row.empty else [],
-                    "ref_value": ref_row.iloc[0][str(age)] if not ref_row.empty and str(age) in ref_row.columns else None,
+                    "ref_row_empty": ref_row.empty if ref_row is not None else None,
+                    "ref_row_columns": ref_row.columns.tolist() if ref_row is not None and not ref_row.empty else [],
+                    "ref_value": ref_row.iloc[0][str(age)] if ref_row is not None and not ref_row.empty and str(age) in ref_row.columns else None,
                     "row_id": row.get("id"),
-                    "reason": "ref_row empty or age not in columns" if ref_row.empty or str(age) not in ref_row.columns else "other"
+                    "reason": "vintage fehlt"
                 })
                 continue
             if not (8 <= age <= 19):
@@ -1591,11 +1591,11 @@ def piste_refpoint_wettkampf_analyse():
                     "sex": sex,
                     "points": points,
                     "age": age,
-                    "ref_row_empty": ref_row.empty,
-                    "ref_row_columns": ref_row.columns.tolist() if not ref_row.empty else [],
-                    "ref_value": ref_row.iloc[0][str(age)] if not ref_row.empty and str(age) in ref_row.columns else None,
+                    "ref_row_empty": ref_row.empty if ref_row is not None else None,
+                    "ref_row_columns": ref_row.columns.tolist() if ref_row is not None and not ref_row.empty else [],
+                    "ref_value": ref_row.iloc[0][str(age)] if ref_row is not None and not ref_row.empty and str(age) in ref_row.columns else None,
                     "row_id": row.get("id"),
-                    "reason": "ref_row empty or age not in columns" if ref_row.empty or str(age) not in ref_row.columns else "other"
+                    "reason": "vintage fehlt"
                 })
                 continue
 
@@ -1609,11 +1609,11 @@ def piste_refpoint_wettkampf_analyse():
                     "sex": sex,
                     "points": points,
                     "age": age,
-                    "ref_row_empty": ref_row.empty,
-                    "ref_row_columns": ref_row.columns.tolist() if not ref_row.empty else [],
-                    "ref_value": ref_row.iloc[0][str(age)] if not ref_row.empty and str(age) in ref_row.columns else None,
+                    "ref_row_empty": ref_row.empty if ref_row is not None else None,
+                    "ref_row_columns": ref_row.columns.tolist() if ref_row is not None and not ref_row.empty else [],
+                    "ref_value": ref_row.iloc[0][str(age)] if ref_row is not None and not ref_row.empty and str(age) in ref_row.columns else None,
                     "row_id": row.get("id"),
-                    "reason": "ref_row empty or age not in columns" if ref_row.empty or str(age) not in ref_row.columns else "other"
+                    "reason": "vintage fehlt"
                 })
                 continue
 
@@ -1624,11 +1624,11 @@ def piste_refpoint_wettkampf_analyse():
                     "sex": sex,
                     "points": points,
                     "age": age,
-                    "ref_row_empty": ref_row.empty,
-                    "ref_row_columns": ref_row.columns.tolist() if not ref_row.empty else [],
-                    "ref_value": ref_row.iloc[0][str(age)] if not ref_row.empty and str(age) in ref_row.columns else None,
+                    "ref_row_empty": ref_row.empty if ref_row is not None else None,
+                    "ref_row_columns": ref_row.columns.tolist() if ref_row is not None and not ref_row.empty else [],
+                    "ref_value": ref_row.iloc[0][str(age)] if ref_row is not None and not ref_row.empty and str(age) in ref_row.columns else None,
                     "row_id": row.get("id"),
-                    "reason": "ref_row empty or age not in columns" if ref_row.empty or str(age) not in ref_row.columns else "other"
+                    "reason": "vintage fehlt"
                 })
                 continue
 
@@ -1643,11 +1643,11 @@ def piste_refpoint_wettkampf_analyse():
                     "sex": sex,
                     "points": points,
                     "age": age,
-                    "ref_row_empty": ref_row.empty,
-                    "ref_row_columns": ref_row.columns.tolist() if not ref_row.empty else [],
-                    "ref_value": ref_row.iloc[0][str(age)] if not ref_row.empty and str(age) in ref_row.columns else None,
+                    "ref_row_empty": ref_row.empty if ref_row is not None else None,
+                    "ref_row_columns": ref_row.columns.tolist() if ref_row is not None and not ref_row.empty else [],
+                    "ref_value": ref_row.iloc[0][str(age)] if ref_row is not None and not ref_row.empty and str(age) in ref_row.columns else None,
                     "row_id": row.get("id"),
-                    "reason": "ref_row empty or age not in columns" if ref_row.empty or str(age) not in ref_row.columns else "other"
+                    "reason": "vintage fehlt"
                 })
                 continue
 
@@ -1664,11 +1664,11 @@ def piste_refpoint_wettkampf_analyse():
                     "sex": sex,
                     "points": points,
                     "age": age,
-                    "ref_row_empty": ref_row.empty,
-                    "ref_row_columns": ref_row.columns.tolist() if not ref_row.empty else [],
-                    "ref_value": ref_row.iloc[0][str(age)] if not ref_row.empty and str(age) in ref_row.columns else None,
+                    "ref_row_empty": ref_row.empty if ref_row is not None else None,
+                    "ref_row_columns": ref_row.columns.tolist() if ref_row is not None and not ref_row.empty else [],
+                    "ref_value": ref_row.iloc[0][str(age)] if ref_row is not None and not ref_row.empty and str(age) in ref_row.columns else None,
                     "row_id": row.get("id"),
-                    "reason": "ref_row empty or age not in columns" if ref_row.empty or str(age) not in ref_row.columns else "other"
+                    "reason": "vintage fehlt"
                 })
                 continue
 
