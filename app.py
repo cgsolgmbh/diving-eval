@@ -1562,7 +1562,7 @@ def piste_refpoint_wettkampf_analyse():
                 supabase.table('compresults').update({
                     "NationalTeam": "no"
                 }).eq("id", row["id"]).execute()
-                 continue
+                continue
 
             try:
                 age = int(comp_year) - int(vintage)
