@@ -1536,7 +1536,7 @@ def piste_refpoint_wettkampf_analyse():
         pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
 
         comp_lookup = {c['Name']: c.get('PisteYear') for c in competitions}
-        comp_qual_lookup = {c['Name']: c for c in competitions}
+        comp_qual_lookup = {str(c['Name']).strip().lower(): c for c in competitions}
         athlete_vintage = {a['id']: a['vintage'] for a in athletes}
         athlete_name_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a['vintage'] for a in athletes}
         refpoints_df = pd.DataFrame(pisterefcomppoints)
@@ -1544,17 +1544,30 @@ def piste_refpoint_wettkampf_analyse():
         updated = 0
 
         for row in compresults:
-            competition_name = row.get("Competition")
+
+            competition_name = str(row.get("Competition", "")).strip().lower()
             comp_row = comp_qual_lookup.get(competition_name, {})
+
+            # Jetzt robustes Jahr-Matching:
             comp_pisteyear = comp_row.get("PisteYear")
-            if not isinstance(comp_pisteyear, (int, float)) or int(comp_pisteyear) != selected_year_int:
-                    st.write({
+            if comp_pisteyear is None:
+                # Debug-Ausgabe, falls kein passender Wettkampf gefunden wurde
+                st.write({
+                    "competition_name": competition_name,
+                    "reason": "Kein passender Wettkampf in competitions gefunden"
+                })
+                continue
+            try:
+                if int(comp_pisteyear) != int(selected_year):
+                    continue
+            except Exception as e:
+                st.write({
                     "competition_name": competition_name,
                     "comp_pisteyear": comp_pisteyear,
-                    "selected_year_int": selected_year_int,
-                    "comp_row": comp_row
+                    "selected_year": selected_year,
+                    "error": str(e)
                 })
-            continue
+                continue
             discipline = row.get("Discipline")
             sex = row.get("sex")
             points = row.get("Points")
