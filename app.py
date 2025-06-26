@@ -1354,6 +1354,17 @@ def auswertung_wettkampf():
     st.download_button("📥 Gefilterte Ergebnisse als CSV", filtered.to_csv(index=False, encoding='utf-8-sig'),
                     file_name="wettkampfauswertung_gefilt.csv", mime="text/csv")
 
+    import io
+    excel_buffer = io.BytesIO()
+    filtered.to_excel(excel_buffer, index=False, engine='openpyxl')
+    excel_buffer.seek(0)
+    st.download_button(
+        "📥 Gefilterte Ergebnisse als Excel",
+        excel_buffer,
+        file_name="wettkampfauswertung_gefilt.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
 def manage_compresults_entry():
     st.header("🏅 Wettkampfresultate eingeben")
 
@@ -1621,6 +1632,8 @@ def piste_refpoint_wettkampf_analyse():
                 }).eq("id", row["id"]).execute()
                 updated += 1
 
+        comp_pisteyear = comp_row.get("PisteYear")
+        if str(comp_pisteyear) == selected_year:
             # 🟩 RegionalTeam prüfen
             category = row.get("CategoryStart", "").strip().lower()
             discipline_lower = discipline.strip().lower()
@@ -1639,7 +1652,6 @@ def piste_refpoint_wettkampf_analyse():
                     "RegionalTeam": regionalteam
                 }).eq("id", row["id"]).execute()
             else:
-                # explizit auf "no" setzen, wenn nicht qualifiziert
                 supabase.table('compresults').update({
                     "RegionalTeam": "no"
                 }).eq("id", row["id"]).execute()
