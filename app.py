@@ -1993,6 +1993,18 @@ def show_top3_wettkaempfe():
             mime="text/csv"
         )
 
+        import io
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            top3_df.to_excel(writer, index=False, sheet_name="Top 3 Wettkämpfe")
+        output.seek(0)
+        st.download_button(
+            "📥 Top 3 Wettkämpfe als Excel",
+            output.getvalue(),
+            file_name="top3_wettkaempfe.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
 def manage_tool_environment():
     st.header("🛠️ Tool Environment Werte eingeben oder importieren")
 
