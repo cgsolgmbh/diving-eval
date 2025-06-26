@@ -1861,7 +1861,9 @@ def piste_refpoint_wettkampf_analyse():
         # --- ENTWICKLUNG RECHNEN ---
         st.info("Starte: Entwicklung rechnen ...")
         year_list = [str(y) for y in range(2024, int(selected_year) + 1)]
-        refcompresults = supabase.table("pisterefcompresults").select("*").in_("PisteYear", year_list).execute().data
+        refcompresults = []
+        for y in year_list:
+            refcompresults.extend(fetch_all_rows("pisterefcompresults", select="*", PisteYear=y))
         if not refcompresults:
             st.warning("Keine Daten in pisterefcompresults für die gewählten Jahre gefunden.")
         else:
@@ -1897,7 +1899,7 @@ def piste_refpoint_wettkampf_analyse():
             # DiveQuality-Berechnung
             refcomppoints = supabase.table("pisterefcomppoints").select("*").execute().data
             refcomppoints_df = pd.DataFrame(refcomppoints)
-            compresults = supabase.table("compresults").select("*").execute().data
+            compresults = fetch_all_rows('compresults', select='*')
             competitions = supabase.table("competitions").select("Name, PisteYear").execute().data
             compresults_df = pd.DataFrame(compresults)
             comp_map = {c["Name"]: c.get("PisteYear") for c in competitions}
@@ -2390,7 +2392,7 @@ def soc_full_calculation():
         athletes_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a for a in athletes}
 
         # pisterefcompresults laden (enthält refaverage, performance, pointsaverageref%)
-        refcompresults = supabase.table('pisterefcompresults').select('*').eq('PisteYear', pisteyear).execute().data
+        refcompresults = fetch_all_rows('pisterefcompresults', select='*', PisteYear=pisteyear)
         refcompresults_df = pd.DataFrame(refcompresults)
 
         # pistedisciplines laden
