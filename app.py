@@ -1548,6 +1548,12 @@ def piste_refpoint_wettkampf_analyse():
             comp_row = comp_qual_lookup.get(competition_name, {})
             comp_pisteyear = comp_row.get("PisteYear")
             if not isinstance(comp_pisteyear, (int, float)) or int(comp_pisteyear) != selected_year_int:
+                    st.write({
+                    "competition_name": competition_name,
+                    "comp_pisteyear": comp_pisteyear,
+                    "selected_year_int": selected_year_int,
+                    "comp_row": comp_row
+                })
                 continue
             discipline = row.get("Discipline")
             sex = row.get("sex")
