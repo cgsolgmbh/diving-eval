@@ -1545,6 +1545,8 @@ def piste_refpoint_wettkampf_analyse():
                 # Fallback: PisteYear oder selected_year_int
                 comp_year = comp_row.get("PisteYear") or selected_year_int
 
+            is_current_year = str(comp_year) == selected_year
+
             athlete_id = row.get("athlete_id")
             vintage = None
             if athlete_id and athlete_id in athlete_vintage:
