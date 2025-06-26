@@ -1559,22 +1559,40 @@ def piste_refpoint_wettkampf_analyse():
                 last = row.get("last_name", "").strip().lower()
                 vintage = athlete_name_lookup.get((first, last))
             if not vintage:
+                supabase.table('compresults').update({
+                    "NationalTeam": "no"
+                }).eq("id", row["id"]).execute()
                  continue
 
             try:
                 age = int(comp_year) - int(vintage)
             except Exception:
+                supabase.table('compresults').update({
+                    "NationalTeam": "no"
+                }).eq("id", row["id"]).execute()
                 continue
             if not (8 <= age <= 19):
+                supabase.table('compresults').update({
+                    "NationalTeam": "no"
+                }).eq("id", row["id"]).execute()
                 continue
 
             discipline = row.get("Discipline")
             sex = row.get("sex")
             points = row.get("Points")
             if not (discipline and sex and points):
+                supabase.table('compresults').update({
+                    "NationalTeam": "no"
+                }).eq("id", row["id"]).execute()
                 continue
 
             if is_excluded_discipline_local(discipline, age, selected_year, agecat_df):
+                supabase.table('compresults').update({
+                    "NationalTeam": "no"
+                }).eq("id", row["id"]).execute()
+                supabase.table('compresults').update({
+                    "NationalTeam": "no"
+                }).eq("id", row["id"]).execute()
                 continue
 
             ref_row = refpoints_df[
