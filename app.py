@@ -1548,26 +1548,10 @@ def piste_refpoint_wettkampf_analyse():
             competition_name = str(row.get("Competition", "")).strip().lower()
             comp_row = comp_qual_lookup.get(competition_name, {})
 
-            # Jetzt robustes Jahr-Matching:
-            comp_pisteyear = comp_row.get("PisteYear")
-            if comp_pisteyear is None:
-                # Debug-Ausgabe, falls kein passender Wettkampf gefunden wurde
-                st.write({
-                    "competition_name": competition_name,
-                    "reason": "Kein passender Wettkampf in competitions gefunden"
-                })
-                continue
-            try:
-                if int(comp_pisteyear) != int(selected_year):
-                    continue
-            except Exception as e:
-                st.write({
-                    "competition_name": competition_name,
-                    "comp_pisteyear": comp_pisteyear,
-                    "selected_year": selected_year,
-                    "error": str(e)
-                })
-                continue
+            colname = f"PisteRefPoints{selected_year}%"
+            percent = row.get(colname)
+            if percent is None or percent == "":
+                continue  # Nur Zeilen mit Wert für das gewählte Jahr verarbeiten!
             discipline = row.get("Discipline")
             sex = row.get("sex")
             points = row.get("Points")
