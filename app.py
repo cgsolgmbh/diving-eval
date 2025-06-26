@@ -3306,6 +3306,91 @@ def athleten_eingeben():
             }).execute()
             st.success(f"Athlet {full_name} gespeichert!")
 
+def show_full_piste_results_clubs():
+    st.header("📊 Full PISTE Results for Clubs")
+
+    # Daten laden
+    soc_df = pd.DataFrame(fetch_all_rows("socadditionalvalues", select="*"))
+    athletes_df = pd.DataFrame(fetch_all_rows("athletes", select="first_name,last_name,club,birthdate,sex"))
+
+    if soc_df.empty or athletes_df.empty:
+        st.info("Keine Daten gefunden.")
+        return
+
+    # Merge für Club, Birthdate, Sex
+    merged = soc_df.merge(
+        athletes_df,
+        how="left",
+        left_on=["first_name", "last_name"],
+        right_on=["first_name", "last_name"],
+        suffixes=("", "_athlete")
+    )
+
+    # Alter berechnen (aus PisteYear und birthdate)
+    merged["Age"] = merged.apply(
+        lambda r: int(r["PisteYear"]) - int(str(r["birthdate"])[:4]) if pd.notnull(r["birthdate"]) and pd.notnull(r["PisteYear"]) else None,
+        axis=1
+    )
+
+    # Bio berechnen
+    bio_fields = [
+        "trainingperf", "compenhancement", "resilience", "trainingtime",
+        "trainingsince", "toolenvironment", "quality", "bioagevalue", "mirwaldvalue"
+    ]
+    merged["Bio"] = merged[bio_fields].apply(
+        lambda row: sum([float(row[f]) for f in bio_fields if pd.notnull(row[f]) and str(row[f]) not in ("", "nan")]), axis=1
+    )
+
+    # Spalten umbenennen und zusammenstellen
+    show_cols = {
+        "first_name": "First Name",
+        "last_name": "Last Name",
+        "birthdate": "Birthdate",
+        "Age": "Age",
+        "Category": "Category",
+        "sex_athlete": "Sex",
+        "club": "Club",
+        "piste": "Piste Sport",
+        "Bio": "Bio",
+        "competitions": "Performance",
+        "totalpoints": "Totalpoints",
+        "CompPointsRegionalTeam": "Competition RegionalTeam",
+        "CompPointsNationalTeam": "Competition NationalTeam",
+        "talentcard": "SOC",
+        "PisteYear": "Piste Year"
+    }
+    # Füge fehlende Spalten als None hinzu
+    for k in show_cols:
+        if k not in merged.columns:
+            merged[k] = None
+
+    df_show = merged[list(show_cols.keys())].rename(columns=show_cols)
+
+    # Filter
+    clubs = sorted(df_show["Club"].dropna().unique())
+    socs = sorted(df_show["SOC"].dropna().unique())
+    years = sorted(df_show["Piste Year"].dropna().unique())
+
+    club = st.selectbox("Club", ["Alle"] + clubs)
+    soc = st.selectbox("SOC", ["Alle"] + socs)
+    year = st.selectbox("Piste Year", ["Alle"] + [str(y) for y in years])
+
+    filtered = df_show.copy()
+    if club != "Alle":
+        filtered = filtered[filtered["Club"] == club]
+    if soc != "Alle":
+        filtered = filtered[filtered["SOC"] == soc]
+    if year != "Alle":
+        filtered = filtered[filtered["Piste Year"].astype(str) == year]
+
+    st.dataframe(filtered)
+    st.download_button(
+        "📥 Gefilterte Ergebnisse als CSV",
+        filtered.to_csv(index=False, encoding='utf-8-sig'),
+        file_name="full_piste_results_clubs.csv",
+        mime="text/csv"
+    )
+
 # Hauptmenü
 def main():
     if "page" not in st.session_state:
@@ -3331,6 +3416,7 @@ def main():
         "Trainingsperformance - Resilienz",
         "SOC Full Calculation",
         "Full PISTE Results SOC",
+        "Full PISTE Results for Clubs",
         "Selektionen Wettkämpfe",
         "Vergleich BIG Competitions",
         "Referenz- und Bewertungstabellen"
@@ -3380,6 +3466,8 @@ def main():
         soc_full_calculation()
     elif selected == "Full PISTE Results SOC":
         show_full_piste_results_soc()
+    elif selected == "Full PISTE Results for Clubs":
+        show_full_piste_results_clubs()
     elif selected == "Selektionen Wettkämpfe":
         selektionen_wettkaempfe()
     elif selected == "Vergleich BIG Competitions":
