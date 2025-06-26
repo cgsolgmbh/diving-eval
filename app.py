@@ -1656,85 +1656,72 @@ def piste_refpoint_wettkampf_analyse():
                 updated += 1
 
         comp_pisteyear = comp_row.get("PisteYear")
-        if str(comp_pisteyear) == selected_year:
-            # 🟩 RegionalTeam prüfen
+        if int(comp_pisteyear) == int(selected_year):
+            # --- RegionalTeam ---
             category = row.get("CategoryStart", "").strip().lower()
             discipline_lower = discipline.strip().lower()
-
             val = comp_row.get("qual-Regional", False)
-            regional_qual = bool(val)  # Nur TRUE erlaubt
-
-            excluded_synchro = (
+            regional_qual = bool(val)
+            excluded_synchro_regio = (
                 category in ["jugend c", "jugend d"] and
                 discipline_lower in ["1m synchro", "3m synchro", "platform synchro"]
             )
-
-            if regional_qual and not excluded_synchro:
-                regionalteam = "yes" if percent is not None and percent >= 70 else "no"
-                supabase.table('compresults').update({
-                    "RegionalTeam": regionalteam
-                }).eq("id", row["id"]).execute()
+            if regional_qual and not excluded_synchro_regio and percent is not None and percent >= 70:
+                regionalteam = "yes"
             else:
-                supabase.table('compresults').update({
-                    "RegionalTeam": "no"
-                }).eq("id", row["id"]).execute()
+                regionalteam = "no"
+            supabase.table('compresults').update({
+                "RegionalTeam": regionalteam
+            }).eq("id", row["id"]).execute()
 
-            # 🟦 NationalTeam prüfen (für alle Kategorien)
+            # --- NationalTeam ---
             val_nat = comp_row.get("qual-National", False)
-            national_qual = bool(val_nat)  # Nur TRUE erlaubt
-
-            category = row.get("CategoryStart", "").strip().lower()
-            discipline_lower = discipline.strip().lower()
-            sex_lower = sex.strip().lower() if sex else ""
-
-            # Synchro-Ausschluss nur für Jugend C/D
-            excluded_synchro = (
+            national_qual = bool(val_nat)
+            excluded_synchro_nat = (
                 category in ["jugend c", "jugend d"] and
                 discipline_lower in ["3m synchro", "turm synchro"]
             )
+            percent_nt = None
 
-            percent = None
-
-            if national_qual and not excluded_synchro:
+            if national_qual and not excluded_synchro_nat:
                 if category in ["jugend c", "jugend d"]:
                     # Referenzwert aus pisterefcomppoints
-                    ref_row = refpoints_df[
+                    ref_row_nt = refpoints_df[
                         (refpoints_df["Discipline"].astype(str).str.lower() == discipline_lower) &
-                        (refpoints_df["sex"].astype(str).str.lower() == sex_lower)
+                        (refpoints_df["sex"].astype(str).str.lower() == sex.strip().lower())
                     ]
-                    if not ref_row.empty and str(age) in ref_row.columns:
-                        ref_value = ref_row.iloc[0][str(age)]
+                    if not ref_row_nt.empty and str(age) in ref_row_nt.columns:
+                        ref_value_nt = ref_row_nt.iloc[0][str(age)]
                         try:
-                            ref_value = float(ref_value)
-                            points_val = float(points)
-                            percent = round((points_val / ref_value) * 100, 1) if ref_value else None
+                            ref_value_nt = float(ref_value_nt)
+                            points_val_nt = float(points)
+                            percent_nt = round((points_val_nt / ref_value_nt) * 100, 1) if ref_value_nt else None
                         except Exception:
-                            percent = None
+                            percent_nt = None
                 else:
                     # Referenzwert aus selectionpoints (Competition="JEM")
-                    sel_row = sel_df[
+                    sel_row_nt = sel_df[
                         (sel_df["Competition"].astype(str).str.lower() == "jem") &
                         (sel_df["category"].astype(str).str.lower() == category) &
                         (sel_df["Discipline"].astype(str).str.lower() == discipline_lower) &
-                        (sel_df["sex"].astype(str).str.lower() == sex_lower) &
+                        (sel_df["sex"].astype(str).str.lower() == sex.strip().lower()) &
                         (sel_df["year"].astype(str) == str(comp_year))
                     ]
-                    if not sel_row.empty:
+                    if not sel_row_nt.empty:
                         try:
-                            ref_value = float(sel_row.iloc[0]["points"])
-                            points_val = float(points)
-                            percent = round((points_val / ref_value) * 100, 1) if ref_value else None
+                            ref_value_nt = float(sel_row_nt.iloc[0]["points"])
+                            points_val_nt = float(points)
+                            percent_nt = round((points_val_nt / ref_value_nt) * 100, 1) if ref_value_nt else None
                         except Exception:
-                            percent = None
+                            percent_nt = None
 
-                nationalteam = "yes" if percent is not None and percent >= 90 else "no"
-                supabase.table('compresults').update({
-                    "NationalTeam": nationalteam
-                }).eq("id", row["id"]).execute()
+                nationalteam = "yes" if percent_nt is not None and percent_nt >= 90 else "no"
             else:
-                supabase.table('compresults').update({
-                    "NationalTeam": "no"
-                }).eq("id", row["id"]).execute()
+                nationalteam = "no"
+
+            supabase.table('compresults').update({
+                "NationalTeam": nationalteam
+            }).eq("id", row["id"]).execute()
 
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
