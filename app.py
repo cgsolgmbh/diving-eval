@@ -1556,92 +1556,22 @@ def piste_refpoint_wettkampf_analyse():
                 last = row.get("last_name", "").strip().lower()
                 vintage = athlete_name_lookup.get((first, last))
             if not vintage:
-                st.write({
-                    "first_name": row.get("first_name"),
-                    "last_name": row.get("last_name"),
-                    "competition": competition_name,
-                    "discipline": discipline,
-                    "sex": sex,
-                    "points": points,
-                    "age": age,
-                    "ref_row_empty": ref_row.empty if ref_row is not None else None,
-                    "ref_row_columns": ref_row.columns.tolist() if ref_row is not None and not ref_row.empty else [],
-                    "ref_value": ref_row.iloc[0][str(age)] if ref_row is not None and not ref_row.empty and str(age) in ref_row.columns else None,
-                    "row_id": row.get("id"),
-                    "reason": "vintage fehlt"
-                })
-                continue
+                 continue
 
             try:
                 age = int(comp_year) - int(vintage)
             except Exception:
-                st.write({
-                    "first_name": row.get("first_name"),
-                    "last_name": row.get("last_name"),
-                    "competition": competition_name,
-                    "discipline": discipline,
-                    "sex": sex,
-                    "points": points,
-                    "age": age,
-                    "ref_row_empty": ref_row.empty if ref_row is not None else None,
-                    "ref_row_columns": ref_row.columns.tolist() if ref_row is not None and not ref_row.empty else [],
-                    "ref_value": ref_row.iloc[0][str(age)] if ref_row is not None and not ref_row.empty and str(age) in ref_row.columns else None,
-                    "row_id": row.get("id"),
-                    "reason": "vintage fehlt"
-                })
                 continue
             if not (8 <= age <= 19):
-                st.write({
-                    "first_name": row.get("first_name"),
-                    "last_name": row.get("last_name"),
-                    "competition": competition_name,
-                    "discipline": discipline,
-                    "sex": sex,
-                    "points": points,
-                    "age": age,
-                    "ref_row_empty": ref_row.empty if ref_row is not None else None,
-                    "ref_row_columns": ref_row.columns.tolist() if ref_row is not None and not ref_row.empty else [],
-                    "ref_value": ref_row.iloc[0][str(age)] if ref_row is not None and not ref_row.empty and str(age) in ref_row.columns else None,
-                    "row_id": row.get("id"),
-                    "reason": "vintage fehlt"
-                })
                 continue
 
             discipline = row.get("Discipline")
             sex = row.get("sex")
             points = row.get("Points")
             if not (discipline and sex and points):
-                st.write({
-                    "first_name": row.get("first_name"),
-                    "last_name": row.get("last_name"),
-                    "competition": competition_name,
-                    "discipline": discipline,
-                    "sex": sex,
-                    "points": points,
-                    "age": age,
-                    "ref_row_empty": ref_row.empty if ref_row is not None else None,
-                    "ref_row_columns": ref_row.columns.tolist() if ref_row is not None and not ref_row.empty else [],
-                    "ref_value": ref_row.iloc[0][str(age)] if ref_row is not None and not ref_row.empty and str(age) in ref_row.columns else None,
-                    "row_id": row.get("id"),
-                    "reason": "vintage fehlt"
-                })
                 continue
 
             if is_excluded_discipline_local(discipline, age, selected_year, agecat_df):
-                st.write({
-                    "first_name": row.get("first_name"),
-                    "last_name": row.get("last_name"),
-                    "competition": competition_name,
-                    "discipline": discipline,
-                    "sex": sex,
-                    "points": points,
-                    "age": age,
-                    "ref_row_empty": ref_row.empty if ref_row is not None else None,
-                    "ref_row_columns": ref_row.columns.tolist() if ref_row is not None and not ref_row.empty else [],
-                    "ref_value": ref_row.iloc[0][str(age)] if ref_row is not None and not ref_row.empty and str(age) in ref_row.columns else None,
-                    "row_id": row.get("id"),
-                    "reason": "vintage fehlt"
-                })
                 continue
 
             ref_row = refpoints_df[
@@ -1649,20 +1579,6 @@ def piste_refpoint_wettkampf_analyse():
                 (refpoints_df["sex"].astype(str).str.lower() == str(sex).lower())
             ]
             if ref_row.empty or str(age) not in ref_row.columns:
-                st.write({
-                    "first_name": row.get("first_name"),
-                    "last_name": row.get("last_name"),
-                    "competition": competition_name,
-                    "discipline": discipline,
-                    "sex": sex,
-                    "points": points,
-                    "age": age,
-                    "ref_row_empty": ref_row.empty if ref_row is not None else None,
-                    "ref_row_columns": ref_row.columns.tolist() if ref_row is not None and not ref_row.empty else [],
-                    "ref_value": ref_row.iloc[0][str(age)] if ref_row is not None and not ref_row.empty and str(age) in ref_row.columns else None,
-                    "row_id": row.get("id"),
-                    "reason": "vintage fehlt"
-                })
                 continue
 
             ref_value = ref_row.iloc[0][str(age)]
@@ -1672,20 +1588,6 @@ def piste_refpoint_wettkampf_analyse():
                 percent = round((points_val / ref_value) * 100, 1) if ref_value else None
             except Exception:
                 percent = None
-                st.write({
-                    "first_name": row.get("first_name"),
-                    "last_name": row.get("last_name"),
-                    "competition": competition_name,
-                    "discipline": discipline,
-                    "sex": sex,
-                    "points": points,
-                    "age": age,
-                    "ref_row_empty": ref_row.empty if ref_row is not None else None,
-                    "ref_row_columns": ref_row.columns.tolist() if ref_row is not None and not ref_row.empty else [],
-                    "ref_value": ref_row.iloc[0][str(age)] if ref_row is not None and not ref_row.empty and str(age) in ref_row.columns else None,
-                    "row_id": row.get("id"),
-                    "reason": "vintage fehlt"
-                })
                 continue
 
             is_current_year = str(comp_year) == selected_year
