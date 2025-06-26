@@ -3343,6 +3343,7 @@ def show_full_piste_results_clubs():
 
     # Spalten umbenennen und zusammenstellen
     show_cols = {
+        "PisteYear": "Piste Year",
         "first_name": "First Name",
         "last_name": "Last Name",
         "birthdate": "Birthdate",
@@ -3354,12 +3355,13 @@ def show_full_piste_results_clubs():
         "Bio": "Bio",
         "competitions": "Performance",
         "totalpoints": "Totalpoints",
+        "pisteminregio": "Piste Regional Min",
+        "pisteminnational": "Piste National Min",
         "CompPointsRegionalTeam": "Competition RegionalTeam",
         "CompPointsNationalTeam": "Competition NationalTeam",
-        "talentcard": "SOC",
-        "PisteYear": "Piste Year",
-        "pisteminregio": "Piste Regional Min",
-        "pisteminnational": "Piste National Min"
+        "talentcard": "SOC"
+        
+
     }
     # Füge fehlende Spalten als None hinzu
     for k in show_cols:
