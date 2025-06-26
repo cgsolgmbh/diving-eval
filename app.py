@@ -1631,16 +1631,12 @@ def piste_refpoint_wettkampf_analyse():
 
             is_current_year = str(comp_year) == selected_year
 
-            # ✅ Nur für das aktuelle Jahr schreiben
-            if is_current_year:
-                colname = f"PisteRefPoints{selected_year}%"
-                supabase.table('compresults').update({
-                    colname: percent
-                }).eq("id", row["id"]).execute()
-                updated += 1
+            colname = f"PisteRefPoints{selected_year}%"
+            supabase.table('compresults').update({
+                colname: percent
+            }).eq("id", row["id"]).execute()
+            updated += 1
 
-        comp_pisteyear = comp_row.get("PisteYear")
-        if int(comp_pisteyear) == int(selected_year):
             # --- RegionalTeam ---
             category = row.get("CategoryStart", "").strip().lower()
             discipline_lower = discipline.strip().lower()
