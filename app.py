@@ -1554,7 +1554,7 @@ def piste_refpoint_wettkampf_analyse():
                     "selected_year_int": selected_year_int,
                     "comp_row": comp_row
                 })
-                continue
+            continue
             discipline = row.get("Discipline")
             sex = row.get("sex")
             points = row.get("Points")
