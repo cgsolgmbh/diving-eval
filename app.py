@@ -1190,7 +1190,7 @@ def bewertung_wettkampf():
                 "EM%": safe_numeric(em_pct),
                 "WM": wm,
                 "WM%": safe_numeric(wm_pct),
-                "NationalTeam": nationalteam,
+                # "NationalTeam": nationalteam,
                 "AveragePoints": average_points,
                 "timestamp": now_str
             }).eq("id", comp_id).execute()
@@ -1501,6 +1501,9 @@ def piste_refpoint_wettkampf_analyse():
     agecategories = supabase.table("agecategories").select("*").execute().data
     agecat_df = pd.DataFrame(agecategories)
 
+    selectionpoints = fetch_all_rows('selectionpoints')
+    sel_df = pd.DataFrame(selectionpoints)
+
     st.info("""
     **Hinweis:**  
     Der Button **"Full Analyse"** berechnet für das angegebene Jahr:
@@ -1623,20 +1626,62 @@ def piste_refpoint_wettkampf_analyse():
                     "RegionalTeam": "no"
                 }).eq("id", row["id"]).execute()
 
-            # 🟦 NationalTeam prüfen (nur Jugend C/D)
-            if category in ["jugend c", "jugend d"]:
-                val_nat = comp_row.get("qual-National", False)
-                national_qual = bool(val_nat)  # Nur TRUE erlaubt
-                if national_qual and discipline_lower not in ["3m synchro", "turm synchro"]:
-                    nationalteam = "yes" if percent is not None and percent >= 90 else "no"
-                    supabase.table('compresults').update({
-                        "NationalTeam": nationalteam
-                    }).eq("id", row["id"]).execute()
+            # 🟦 NationalTeam prüfen (für alle Kategorien)
+            val_nat = comp_row.get("qual-National", False)
+            national_qual = bool(val_nat)  # Nur TRUE erlaubt
+
+            category = row.get("CategoryStart", "").strip().lower()
+            discipline_lower = discipline.strip().lower()
+            sex_lower = sex.strip().lower() if sex else ""
+
+            # Synchro-Ausschluss nur für Jugend C/D
+            excluded_synchro = (
+                category in ["jugend c", "jugend d"] and
+                discipline_lower in ["3m synchro", "turm synchro"]
+            )
+
+            percent = None
+
+            if national_qual and not excluded_synchro:
+                if category in ["jugend c", "jugend d"]:
+                    # Referenzwert aus pisterefcomppoints
+                    ref_row = refpoints_df[
+                        (refpoints_df["Discipline"].astype(str).str.lower() == discipline_lower) &
+                        (refpoints_df["sex"].astype(str).str.lower() == sex_lower)
+                    ]
+                    if not ref_row.empty and str(age) in ref_row.columns:
+                        ref_value = ref_row.iloc[0][str(age)]
+                        try:
+                            ref_value = float(ref_value)
+                            points_val = float(points)
+                            percent = round((points_val / ref_value) * 100, 1) if ref_value else None
+                        except Exception:
+                            percent = None
                 else:
-                    # explizit auf "no" setzen, wenn nicht qualifiziert
-                    supabase.table('compresults').update({
-                        "NationalTeam": "no"
-                    }).eq("id", row["id"]).execute()
+                    # Referenzwert aus selectionpoints (Competition="JEM")
+                    sel_row = sel_df[
+                        (sel_df["Competition"].astype(str).str.lower() == "jem") &
+                        (sel_df["category"].astype(str).str.lower() == category) &
+                        (sel_df["Discipline"].astype(str).str.lower() == discipline_lower) &
+                        (sel_df["sex"].astype(str).str.lower() == sex_lower) &
+                        (sel_df["year"].astype(str) == str(comp_year))
+                    ]
+                    if not sel_row.empty:
+                        try:
+                            ref_value = float(sel_row.iloc[0]["points"])
+                            points_val = float(points)
+                            percent = round((points_val / ref_value) * 100, 1) if ref_value else None
+                        except Exception:
+                            percent = None
+
+                nationalteam = "yes" if percent is not None and percent >= 90 else "no"
+                supabase.table('compresults').update({
+                    "NationalTeam": nationalteam
+                }).eq("id", row["id"]).execute()
+            else:
+                supabase.table('compresults').update({
+                    "NationalTeam": "no"
+                }).eq("id", row["id"]).execute()
 
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
