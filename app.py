@@ -56,12 +56,11 @@ def get_official_category_local(age, year, agecat_df):
         return row.iloc[0]["category"]
     return None
 
-def is_excluded_discipline_local(discipline, category):
-    excluded_disciplines = ["1m synchro", "3m synchro", "platform synchro"]
-    excluded_categories = ["jugend c", "jugend d"]
+def is_excluded_discipline_local(discipline, age, year, agecat_df):
+    category = get_official_category_local(age, year, agecat_df)
     return (
-        str(discipline).strip().lower() in excluded_disciplines and
-        str(category).strip().lower() in excluded_categories
+        str(discipline).strip().lower() in ["1m synchro", "3m synchro"]
+        and category in ["Jugend C", "Jugend D"]
     )
 
 def get_pistedisciplines():
@@ -1495,71 +1494,10 @@ def safe_numeric(val):
     except Exception:
         return None
 
-def get_ref_value(ref_df, discipline, sex, age, ref_col_prefix=""):
-    try:
-        filtered = ref_df[
-            (ref_df["Discipline"].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
-            (ref_df["sex"].astype(str).str.strip().str.lower() == str(sex).strip().lower())
-        ]
-        ref_col = f"{ref_col_prefix}{int(age)}" if ref_col_prefix else str(int(age))
-        if filtered.empty or ref_col not in filtered.columns:
-            return None
-        val = filtered.iloc[0][ref_col]
-        return float(val) if val not in (None, "", "nan") else None
-    except Exception as e:
-        return None
-
-
-def calculate_percent(points, ref_value):
-    try:
-        points = float(points)
-        ref_value = float(ref_value)
-        return round((points / ref_value) * 100, 1) if ref_value != 0 else None
-    except Exception:
-        return None
-
-
-import streamlit as st
-import pandas as pd
-from statistics import mean
-
-# --- Hilfsfunktionen (Falls noch nicht definiert) ---
-def to_float(val):
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return None
-
-def to_int(val):
-    try:
-        return int(val)
-    except (TypeError, ValueError):
-        return None
-
-# Beispiel-Implementierung, muss an deine Logik angepasst werden
-def is_excluded_discipline_local(discipline, category=None):
-    if not discipline:
-        return True
-    discipline = discipline.strip().lower()
-    if category:
-        category = category.strip().lower()
-    # Beispiel: bestimmte Disziplinen ausschließen
-    excluded = ["training", "test"]
-    return discipline in excluded
-
-def calculate_percent(points, ref_value):
-    if not points or not ref_value:
-        return None
-    try:
-        return round(float(points) / float(ref_value) * 100, 1)
-    except Exception:
-        return None
-
-# --- Hauptfunktion ---
 def piste_refpoint_wettkampf_analyse():
     st.header("📊 Piste RefPoint Wettkampf Analyse")
 
-    # Lade agecategories einmal am Anfang
+    # Lade die agecategories-Tabelle EINMAL am Anfang der Funktion:
     agecategories = supabase.table("agecategories").select("*").execute().data
     agecat_df = pd.DataFrame(agecategories)
 
@@ -1578,15 +1516,11 @@ def piste_refpoint_wettkampf_analyse():
         st.info("Starte: Berechnen ...")
         selected_year_int = int(selected_year)
 
-        # --- Daten laden ---
-        competitions = supabase.table('competitions').select('Name, Date, PisteYear, qual-Regional, qual-National').execute().data
-        comp_qual_lookup = {c['Name']: c for c in competitions}
+        competitions = supabase.table('competitions').select('Name, PisteYear, qual-Regional, qual-National').execute().data
         compresults = supabase.table('compresults').select('*').execute().data
-        st.write("Spalten in compresults:", compresults[0].keys())
         athletes = supabase.table('athletes').select('id, vintage, first_name, last_name').execute().data
         pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
 
-        # --- Lookup-Tabellen ---
         comp_lookup = {c['Name']: c.get('PisteYear') for c in competitions}
         comp_qual_lookup = {c['Name']: c for c in competitions}
         athlete_vintage = {a['id']: a['vintage'] for a in athletes}
@@ -1595,38 +1529,29 @@ def piste_refpoint_wettkampf_analyse():
 
         updated = 0
 
-        # --- Berechnung & Updates für jeden Wettkampf-Resultat-Row ---
         for row in compresults:
             competition_name = row.get("Competition")
-            # Hole das Wettkampfdatum
+            piste_year = comp_lookup.get(competition_name)
             comp_row = comp_qual_lookup.get(competition_name, {})
-            comp_date = comp_row.get("Date")
-            if comp_date:
-                comp_year = int(str(comp_date)[:4])
-            else:
-                # Fallback: PisteYear oder selected_year_int
-                comp_year = comp_row.get("PisteYear") or selected_year_int
-
-            is_current_year = comp_year == selected_year_int
+            is_current_year = str(piste_year) == selected_year
 
             athlete_id = row.get("athlete_id")
-            vintage = athlete_vintage.get(athlete_id)
-            if not vintage:
+            vintage = None
+            if athlete_id and athlete_id in athlete_vintage:
+                vintage = athlete_vintage[athlete_id]
+            else:
                 first = row.get("first_name", "").strip().lower()
                 last = row.get("last_name", "").strip().lower()
                 vintage = athlete_name_lookup.get((first, last))
             if not vintage:
-                st.write("Kein vintage:", row)
                 continue
 
             try:
-                age = int(comp_year) - int(vintage)
+                age = selected_year_int - int(vintage)
             except Exception:
                 continue
             if not (9 <= age <= 19):
                 continue
-
-            # ... Rest wie gehabt ...
 
             discipline = row.get("Discipline")
             sex = row.get("sex")
@@ -1634,16 +1559,26 @@ def piste_refpoint_wettkampf_analyse():
             if not (discipline and sex and points):
                 continue
 
-            category = row.get("CategoryStart", "").strip().lower()
-            if is_excluded_discipline_local(discipline, category):
+            if is_excluded_discipline_local(discipline, age, selected_year, agecat_df):
                 continue
 
-            ref_value = get_ref_value(refpoints_df, discipline, sex, age)
-            percent = calculate_percent(points, ref_value)
-            if ref_value is None:
-                st.write("Kein RefValue:", discipline, sex, age, row)
+            ref_row = refpoints_df[
+                (refpoints_df["Discipline"].astype(str).str.lower() == str(discipline).lower()) &
+                (refpoints_df["sex"].astype(str).str.lower() == str(sex).lower())
+            ]
+            if ref_row.empty or str(age) not in ref_row.columns:
                 continue
 
+            ref_value = ref_row.iloc[0][str(age)]
+            try:
+                ref_value = float(ref_value)
+                points_val = float(points)
+                percent = round((points_val / ref_value) * 100, 1) if ref_value else None
+            except Exception:
+                percent = None
+                continue
+
+            # ✅ Nur für das aktuelle Jahr schreiben
             if is_current_year:
                 colname = f"PisteRefPoints{selected_year}%"
                 supabase.table('compresults').update({
@@ -1651,23 +1586,29 @@ def piste_refpoint_wettkampf_analyse():
                 }).eq("id", row["id"]).execute()
                 updated += 1
 
+            # 🟩 RegionalTeam prüfen
+            category = row.get("CategoryStart", "").strip().lower()
+            discipline_lower = discipline.strip().lower()
+
             val = comp_row.get("qual-Regional", "")
             regional_qual = (
                 isinstance(val, bool) and val is True
             ) or (
                 str(val).strip().lower() in ["true", "yes", "1"]
             )
-            discipline_lower = discipline.strip().lower()
+
             excluded_synchro = (
                 category in ["jugend c", "jugend d"] and
                 discipline_lower in ["1m synchro", "3m synchro", "platform synchro"]
             )
+
             if regional_qual and not excluded_synchro:
                 regionalteam = "yes" if percent is not None and percent >= 70 else "no"
                 supabase.table('compresults').update({
                     "RegionalTeam": regionalteam
                 }).eq("id", row["id"]).execute()
 
+            # 🟦 NationalTeam prüfen (nur Jugend C/D)
             if category in ["jugend c", "jugend d"]:
                 val_nat = comp_row.get("qual-National", "")
                 national_qual = (
@@ -1683,183 +1624,226 @@ def piste_refpoint_wettkampf_analyse():
 
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
-        # --- athlete_rows erstellen ---
-        athlete_rows = []
-        for row in compresults:
-            athlete = f"{row.get('first_name', '').strip().lower()} {row.get('last_name', '').strip().lower()}"
-            discipline = row.get("Discipline")
-            result = to_float(row.get("Points"))
-            athlete_id = row.get("athlete_id")
-            vintage = athlete_vintage.get(athlete_id, 0)
+
+    # ... im Top3-Abschnitt:
+    ref_col = f"PisteRefPoints{selected_year}%"
+    compresults = fetch_all_rows('compresults', select='*')
+    df = pd.DataFrame(compresults)
+    if ref_col not in df.columns:
+        st.error(f"Spalte {ref_col} nicht gefunden!")
+    else:
+        competitions = supabase.table('competitions').select('Name, PisteYear').execute().data
+        comp_map = {c['Name']: c.get('PisteYear') for c in competitions}
+        df["PisteYear"] = df["Competition"].map(comp_map)
+        athletes = supabase.table('athletes').select('first_name, last_name, vintage').execute().data
+        athlete_vintage = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a['vintage'] for a in athletes}
+        pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
+        pisterefcomppoints_df = pd.DataFrame(pisterefcomppoints)
+
+        # Altersberechnung
+        df["age"] = df.apply(lambda r: int(selected_year) - int(r["vintage"]) if r.get("vintage") else None, axis=1)
+        # --- AUSSCHLUSS HIER ---
+        df = df[~df.apply(lambda r: is_excluded_discipline_local(r.get("Discipline"), r.get("age"), selected_year, agecat_df), axis=1)]
+
+        grouped = df[df[ref_col].notnull() & (df[ref_col] != "")].groupby([
+            df['first_name'].str.strip().str.lower(),
+            df['last_name'].str.strip().str.lower()
+        ])
+        inserted = 0
+        for (first, last), group in grouped:
+            group = group.sort_values(ref_col, ascending=False)
+            top3 = group.head(3)
+            if top3.empty:
+                continue
+            vintage = athlete_vintage.get((first, last))
             if not vintage:
                 continue
-            reference_value = get_ref_value(refpoints_df, discipline, row.get("sex"), selected_year_int - int(vintage))
-            year = comp_lookup.get(row.get("Competition"))
-            category = row.get("CategoryStart", "").strip().lower()
+            age = int(selected_year) - int(vintage)
+            data = {
+                "first_name": top3.iloc[0]['first_name'],
+                "last_name": top3.iloc[0]['last_name'],
+                "age": age,
+                "PisteYear": int(selected_year),
+            }
+            pointsaverage = []
+            for i in range(1, 4):
+                if len(top3) >= i:
+                    row = top3.iloc[i-1]
+                    data[f"competition{i}"] = row.get("Competition")
+                    data[f"discipline{i}"] = row.get("Discipline")
+                    data[f"points{i}"] = row.get("Points")
+                    data[f"reference{i}"] = row.get(ref_col)
+                    avg_points = None
+                    avg_row = df[
+                        (df['first_name'].str.strip().str.lower() == first) &
+                        (df['last_name'].str.strip().str.lower() == last) &
+                        (df['Competition'] == row.get("Competition")) &
+                        (df['Discipline'] == row.get("Discipline")) &
+                        (df['PisteYear'] == int(selected_year))
+                    ]
+                    if not avg_row.empty:
+                        avg_points = avg_row.iloc[0].get("AveragePoints")
+                    data[f"pointsaverage{i}"] = avg_points
+                    if avg_points not in (None, "", "nan"):
+                        try:
+                            pointsaverage.append(float(avg_points))
+                        except Exception:
+                            pass
+                else:
+                    data[f"competition{i}"] = None
+                    data[f"discipline{i}"] = None
+                    data[f"points{i}"] = None
+                    data[f"reference{i}"] = None
+                    data[f"pointsaverage{i}"] = None
+            data["pointsaverageaverage"] = round(sum(pointsaverage) / len(pointsaverage), 2) if pointsaverage else None
+            refs = [data[f"reference{i}"] for i in range(1, 4) if data[f"reference{i}"] is not None]
+            try:
+                refs = [float(r) for r in refs if r not in ("", None)]
+                data["refaverage"] = round(sum(refs) / len(refs), 1) if refs else None
+            except Exception:
+                data["refaverage"] = None
+            pointsaverageref = None
+            try:
+                discipline = data.get("discipline1")
+                if not discipline:
+                    discipline = top3.iloc[0].get("Discipline") if len(top3) > 0 else None
+                sex = None
+                cr_row = df[
+                    (df['first_name'].str.strip().str.lower() == first) &
+                    (df['last_name'].str.strip().str.lower() == last) &
+                    (df['PisteYear'] == int(selected_year))
+                ]
+                if not cr_row.empty:
+                    sex = cr_row.iloc[0].get("sex")
+                if not sex or sex == "":
+                    athlete_row = [a for a in athletes if a['first_name'].strip().lower() == first and a['last_name'].strip().lower() == last]
+                    if athlete_row:
+                        sex = athlete_row[0].get("sex")
+                quality_col = f"quality{int(age)}"
+                ref_row = pisterefcomppoints_df[
+                    (pisterefcomppoints_df["Discipline"].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
+                    (pisterefcomppoints_df["sex"].astype(str).str.strip().str.lower() == str(sex).strip().lower())
+                ]
+                if not ref_row.empty and quality_col in ref_row.columns:
+                    ref_value = ref_row.iloc[0][quality_col]
+                    avg_val = data.get("pointsaverageaverage")
+                    if ref_value not in (None, "", "nan") and avg_val not in (None, "", "nan"):
+                        try:
+                            ref_value = float(ref_value)
+                            avg_val = float(avg_val)
+                            if ref_value != 0:
+                                pointsaverageref = round((avg_val / ref_value) * 100, 1)
+                        except Exception:
+                            pointsaverageref = None
+            except Exception:
+                pointsaverageref = None
+            data["pointsaverageref%"] = pointsaverageref
+            supabase.table("pisterefcompresults").delete()\
+                .eq("first_name", data["first_name"])\
+                .eq("last_name", data["last_name"])\
+                .eq("PisteYear", data["PisteYear"]).execute()
+            supabase.table("pisterefcompresults").insert(data).execute()
+            inserted += 1
+        st.success(f"Top3-Auswertung abgeschlossen. {inserted} Einträge für {selected_year} gespeichert.")
 
-            if result is not None and reference_value is not None and year is not None:
-                athlete_rows.append({
-                    "athlete": athlete,
-                    "discipline": discipline,
-                    "result": result,
-                    "reference_value": reference_value,
-                    "year": int(year),
-                    "category": category,
-                })
-
-        # --- Top-3 Wettkämpfe & Durchschnittsberechnung ---
-        athlete_top3 = {}
-        output = []
-
-        for row in athlete_rows:
-            athlete = row["athlete"]
-            discipline = row["discipline"]
-            result = to_float(row["result"])
-            ref = to_float(row["reference_value"])
-            year = to_int(row["year"])
-
-            if athlete not in athlete_top3:
-                athlete_top3[athlete] = {}
-
-            if discipline not in athlete_top3[athlete]:
-                athlete_top3[athlete][discipline] = []
-
-            if ref and result:
-                refpoints = result / ref * 100
-                athlete_top3[athlete][discipline].append({
-                    "year": year,
-                    "refpoints": refpoints,
-                    "result": result,
-                    "ref": ref,
-                })
-
-        for athlete, disciplines in athlete_top3.items():
-            for discipline, performances in disciplines.items():
-                if is_excluded_discipline_local(discipline):
+        # --- ENTWICKLUNG RECHNEN ---
+        st.info("Starte: Entwicklung rechnen ...")
+        year_list = [str(y) for y in range(2024, int(selected_year) + 1)]
+        refcompresults = supabase.table("pisterefcompresults").select("*").in_("PisteYear", year_list).execute().data
+        if not refcompresults:
+            st.warning("Keine Daten in pisterefcompresults für die gewählten Jahre gefunden.")
+        else:
+            df = pd.DataFrame(refcompresults)
+            grouped = df.groupby([df['first_name'].str.strip().str.lower(), df['last_name'].str.strip().str.lower()])
+            updated = 0
+            for (first, last), group in grouped:
+                group = group.sort_values("PisteYear")
+                this_year_row = group[group["PisteYear"] == int(selected_year)]
+                if this_year_row.empty:
                     continue
+                this_year_value = this_year_row.iloc[0].get("refaverage")
+                prev_years = group[group["PisteYear"] != int(selected_year)]
+                prev_values = prev_years["refaverage"].dropna().tolist()
+                if len(prev_values) < 1 or this_year_value is None:
+                    continue
+                try:
+                    prev_avg = sum([float(v) for v in prev_values]) / len(prev_values)
+                    this_val = float(this_year_value)
+                    if prev_avg == 0:
+                        performance = None
+                    else:
+                        performance = round(((this_val - prev_avg) / prev_avg) * 100, 1)
+                except Exception:
+                    performance = None
+                supabase.table("pisterefcompresults").update({
+                    "performance": performance
+                }).eq("first_name", this_year_row.iloc[0]["first_name"])\
+                  .eq("last_name", this_year_row.iloc[0]["last_name"])\
+                  .eq("PisteYear", int(selected_year)).execute()
+                updated += 1
 
-                top3 = sorted(performances, key=lambda x: x["refpoints"], reverse=True)[:3]
-                if len(top3) == 3:
-                    averagepoints = mean([p["refpoints"] for p in top3])
-                    refaverage = mean([p["ref"] for p in top3])
-                    results = [p["result"] for p in top3]
-                    years = [p["year"] for p in top3]
-
-                    output.append({
-                        "athlete": athlete,
-                        "discipline": discipline,
-                        "refaverage": refaverage,
-                        "result1": results[0],
-                        "result2": results[1],
-                        "result3": results[2],
-                        "year1": years[0],
-                        "year2": years[1],
-                        "year3": years[2],
-                        "averagepoints": averagepoints,
-                        "pointsaverageref%": averagepoints / refaverage * 100 if refaverage else None
-                    })
-
-        # --- Entwicklungsberechnung ---
-        dev_data = {}
-        for row in output:
-            athlete = row["athlete"]
-            discipline = row["discipline"]
-            year = row["year1"]
-            refavg = row.get("refaverage")
-
-            if not refavg:
-                continue
-
-            key = (athlete, discipline)
-            if key not in dev_data:
-                dev_data[key] = []
-            dev_data[key].append((year, refavg))
-
-        for (athlete, discipline), year_data in dev_data.items():
-            sorted_years = sorted(year_data, key=lambda x: x[0])
-            for i in range(1, len(sorted_years)):
-                year_now, ref_now = sorted_years[i]
-                year_prev, ref_prev = sorted_years[i - 1]
-
-                if ref_prev:
-                    entwicklung = ref_now / ref_prev * 100
-                    output.append({
-                        "athlete": athlete,
-                        "discipline": discipline,
-                        "jahr": year_now,
-                        "entwicklung": entwicklung
-                    })
-
-        # --- DiveQuality-Berechnung ---
-        refcomppoints_df = pd.DataFrame(supabase.table("pisterefcomppoints").select("*").execute().data)
-        compresults_df = pd.DataFrame(compresults)
-        competitions = supabase.table("competitions").select("Name, PisteYear").execute().data
-        comp_map = {c["Name"]: c.get("PisteYear") for c in competitions}
-        compresults_df["PisteYear"] = compresults_df["Competition"].map(comp_map)
-
-        grouped = compresults_df.groupby(["first_name", "last_name"])
-
-        for (first, last), group in grouped:
-            group = group.sort_values("PisteYear")
-            this_year_row = group[group["PisteYear"] == selected_year_int]
-            if this_year_row.empty:
-                continue
-
-            age = this_year_row.iloc[0].get("age")
-            sex = this_year_row.iloc[0].get("sex")
-
-            if not sex or not age:
-                cr_fallback = compresults_df[
+            # DiveQuality-Berechnung
+            refcomppoints = supabase.table("pisterefcomppoints").select("*").execute().data
+            refcomppoints_df = pd.DataFrame(refcomppoints)
+            compresults = supabase.table("compresults").select("*").execute().data
+            competitions = supabase.table("competitions").select("Name, PisteYear").execute().data
+            compresults_df = pd.DataFrame(compresults)
+            comp_map = {c["Name"]: c.get("PisteYear") for c in competitions}
+            compresults_df["PisteYear"] = compresults_df["Competition"].map(comp_map)
+            for (first, last), group in grouped:
+                group = group.sort_values("PisteYear")
+                this_year_row = group[group["PisteYear"] == int(selected_year)]
+                if this_year_row.empty:
+                    continue
+                age = this_year_row.iloc[0].get("age")
+                sex = this_year_row.iloc[0].get("sex", None)
+                if not age or not sex:
+                    cr = compresults_df[
+                        (compresults_df['first_name'].str.strip().str.lower() == first) &
+                        (compresults_df['last_name'].str.strip().str.lower() == last) &
+                        (compresults_df['PisteYear'] == int(selected_year))
+                    ]
+                    if not cr.empty:
+                        sex = cr.iloc[0].get("sex")
+                cr_rows = compresults_df[
                     (compresults_df['first_name'].str.strip().str.lower() == first) &
                     (compresults_df['last_name'].str.strip().str.lower() == last) &
-                    (compresults_df['PisteYear'] == selected_year_int)
+                    (compresults_df['Competition'].notnull()) &
+                    (compresults_df['Points'].notnull()) &
+                    (compresults_df['PisteYear'] == int(selected_year))
                 ]
-                if not cr_fallback.empty:
-                    sex = cr_fallback.iloc[0].get("sex")
-
-            cr_rows = compresults_df[
-                (compresults_df['first_name'].str.strip().str.lower() == first) &
-                (compresults_df['last_name'].str.strip().str.lower() == last) &
-                (compresults_df['PisteYear'] == selected_year_int) &
-                (compresults_df['Points'].notnull())
-            ]
-
-            quality_vals = []
-            for _, cr in cr_rows.iterrows():
-                discipline = cr.get("Discipline")
-                avg_points = cr.get("AveragePoints")
-                if is_excluded_discipline_local(discipline, agecat_df=agecat_df):
-                    continue
-                if not (discipline and sex and avg_points and age):
-                    st.write("Fehlende Werte:", discipline, sex, points, row)
-                    continue
-
-                ref_row = refcomppoints_df[
-                    (refcomppoints_df["Discipline"].astype(str).str.lower() == str(discipline).lower()) &
-                    (refcomppoints_df["sex"].astype(str).str.lower() == str(sex).lower())
-                ]
-                quality_col = f"quality{int(age)}"
-                if ref_row.empty or quality_col not in ref_row.columns:
-                    continue
-
-                try:
-                    ref_val = float(ref_row.iloc[0][quality_col])
-                    avg_val = float(avg_points)
-                    deviation = round(((avg_val - ref_val) / ref_val) * 100, 1) if ref_val else None
-                    if deviation is not None:
-                        quality_vals.append(deviation)
-                except Exception:
-                    continue
-
-            quality = round(sum(quality_vals) / len(quality_vals), 1) if quality_vals else None
-            supabase.table("pisterefcompresults").update({"quality": quality})\
-                .eq("first_name", this_year_row.iloc[0]["first_name"])\
-                .eq("last_name", this_year_row.iloc[0]["last_name"])\
-                .eq("PisteYear", selected_year_int).execute()
-
-        st.success("DiveQuality-Berechnung abgeschlossen.")
-
-
+                quality_vals = []
+                for _, cr_row in cr_rows.iterrows():
+                    discipline = cr_row.get("Discipline")
+                    avg_points = cr_row.get("AveragePoints")
+                    # --- AUSSCHLUSS HIER ---
+                    if is_excluded_discipline_local(discipline, age, selected_year, agecat_df):
+                        continue
+                    if not (discipline and sex and avg_points and age):
+                        continue
+                    ref_row = refcomppoints_df[
+                        (refcomppoints_df["Discipline"].astype(str).str.lower() == str(discipline).lower()) &
+                        (refcomppoints_df["sex"].astype(str).str.lower() == str(sex).lower())
+                    ]
+                    quality_col = f"quality{int(age)}"
+                    if ref_row.empty or quality_col not in ref_row.columns:
+                        continue
+                    ref_value = ref_row.iloc[0][quality_col]
+                    try:
+                        ref_value = float(ref_value)
+                        avg_points_val = float(avg_points)
+                        deviation = round(((avg_points_val - ref_value) / ref_value) * 100, 1) if ref_value else None
+                        if deviation is not None:
+                            quality_vals.append(deviation)
+                    except Exception:
+                        continue
+                quality = round(sum(quality_vals) / len(quality_vals), 1) if quality_vals else None
+                supabase.table("pisterefcompresults").update({
+                    "quality": quality
+                }).eq("first_name", this_year_row.iloc[0]["first_name"])\
+                  .eq("last_name", this_year_row.iloc[0]["last_name"])\
+                  .eq("PisteYear", int(selected_year)).execute()
+            st.success(f"Entwicklung für {updated} Personen berechnet und gespeichert.")
 
 def show_top3_wettkaempfe():
     st.header("🏆 Top 3 Wettkämpfe pro Athlet und Jahr")
