@@ -1545,6 +1545,10 @@ def piste_refpoint_wettkampf_analyse():
 
         for row in compresults:
             competition_name = row.get("Competition")
+            comp_row = comp_qual_lookup.get(competition_name, {})
+            comp_pisteyear = comp_row.get("PisteYear")
+            if str(comp_pisteyear) != selected_year:
+                continue  # Nur Ergebnisse aus dem gewählten Jahr bearbeiten!
             discipline = row.get("Discipline")
             sex = row.get("sex")
             points = row.get("Points")
