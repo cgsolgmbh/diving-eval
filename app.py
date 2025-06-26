@@ -1516,7 +1516,7 @@ def piste_refpoint_wettkampf_analyse():
         st.info("Starte: Berechnen ...")
         selected_year_int = int(selected_year)
 
-        competitions = supabase.table('competitions').select('Name, PisteYear, qual-Regional, qual-National').execute().data
+        competitions = supabase.table('competitions').select('Name, Date, PisteYear, qual-Regional, qual-National').execute().data
         compresults = supabase.table('compresults').select('*').execute().data
         athletes = supabase.table('athletes').select('id, vintage, first_name, last_name').execute().data
         pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
@@ -1531,9 +1531,14 @@ def piste_refpoint_wettkampf_analyse():
 
         for row in compresults:
             competition_name = row.get("Competition")
-            piste_year = comp_lookup.get(competition_name)
             comp_row = comp_qual_lookup.get(competition_name, {})
-            is_current_year = str(piste_year) == selected_year
+            # Hole das Jahr aus dem Datum (z.B. "2025-06-21" → 2025)
+            comp_date = comp_row.get("Date")
+            if comp_date:
+                comp_year = int(str(comp_date)[:4])
+            else:
+                # Fallback: PisteYear oder selected_year_int
+                comp_year = comp_row.get("PisteYear") or selected_year_int
 
             athlete_id = row.get("athlete_id")
             vintage = None
@@ -1547,10 +1552,10 @@ def piste_refpoint_wettkampf_analyse():
                 continue
 
             try:
-                age = selected_year_int - int(vintage)
+                age = int(comp_year) - int(vintage)
             except Exception:
                 continue
-            if not (9 <= age <= 19):
+            if not (8 <= age <= 19):
                 continue
 
             discipline = row.get("Discipline")
