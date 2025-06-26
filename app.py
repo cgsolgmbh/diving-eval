@@ -1547,7 +1547,7 @@ def piste_refpoint_wettkampf_analyse():
             competition_name = row.get("Competition")
             comp_row = comp_qual_lookup.get(competition_name, {})
             comp_pisteyear = comp_row.get("PisteYear")
-            if int(comp_pisteyear) != selected_year_int:
+            if not isinstance(comp_pisteyear, (int, float)) or int(comp_pisteyear) != selected_year_int:
                 continue
             discipline = row.get("Discipline")
             sex = row.get("sex")
