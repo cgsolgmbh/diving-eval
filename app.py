@@ -3356,8 +3356,8 @@ def show_full_piste_results_clubs():
         "competitions": "Performance",
         "totalpoints": "Totalpoints",
         "pisteminregio": "Piste Regional Min",
-        "pisteminnational": "Piste National Min",
         "CompPointsRegionalTeam": "Competition RegionalTeam",
+        "pisteminnational": "Piste National Min",
         "CompPointsNationalTeam": "Competition NationalTeam",
         "talentcard": "SOC"
         
