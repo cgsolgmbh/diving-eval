@@ -1531,9 +1531,9 @@ def piste_refpoint_wettkampf_analyse():
 
         for row in compresults:
             competition_name = row.get("Competition")
-                discipline = row.get("Discipline")
-                sex = row.get("sex")
-                points = row.get("Points")
+            discipline = row.get("Discipline")
+            sex = row.get("sex")
+            points = row.get("Points")
             comp_row = comp_qual_lookup.get(competition_name, {})
             # Hole das Jahr aus dem Datum (z.B. "2025-06-21" → 2025)
             comp_date = comp_row.get("Date")
