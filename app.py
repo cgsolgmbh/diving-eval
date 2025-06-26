@@ -1517,7 +1517,7 @@ def piste_refpoint_wettkampf_analyse():
         selected_year_int = int(selected_year)
 
         competitions = supabase.table('competitions').select('Name, Date, PisteYear, qual-Regional, qual-National').execute().data
-        compresults = supabase.table('compresults').select('*').execute().data
+        compresults = fetch_all_rows('compresults', select='*')
         athletes = supabase.table('athletes').select('id, vintage, first_name, last_name').execute().data
         pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
 
