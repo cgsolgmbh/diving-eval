@@ -1604,12 +1604,8 @@ def piste_refpoint_wettkampf_analyse():
             category = row.get("CategoryStart", "").strip().lower()
             discipline_lower = discipline.strip().lower()
 
-            val = comp_row.get("qual-Regional", "")
-            regional_qual = (
-                isinstance(val, bool) and val is True
-            ) or (
-                str(val).strip().lower() in ["true", "yes", "1"]
-            )
+            val = comp_row.get("qual-Regional", False)
+            regional_qual = bool(val)  # Nur TRUE erlaubt
 
             excluded_synchro = (
                 category in ["jugend c", "jugend d"] and
@@ -1621,19 +1617,25 @@ def piste_refpoint_wettkampf_analyse():
                 supabase.table('compresults').update({
                     "RegionalTeam": regionalteam
                 }).eq("id", row["id"]).execute()
+            else:
+                # explizit auf "no" setzen, wenn nicht qualifiziert
+                supabase.table('compresults').update({
+                    "RegionalTeam": "no"
+                }).eq("id", row["id"]).execute()
 
             # 🟦 NationalTeam prüfen (nur Jugend C/D)
             if category in ["jugend c", "jugend d"]:
-                val_nat = comp_row.get("qual-National", "")
-                national_qual = (
-                    isinstance(val_nat, bool) and val_nat is True
-                ) or (
-                    str(val_nat).strip().lower() in ["true", "yes", "1"]
-                )
-                if discipline_lower not in ["3m synchro", "turm synchro"]:
-                    nationalteam = "yes" if national_qual and percent is not None and percent >= 90 else "no"
+                val_nat = comp_row.get("qual-National", False)
+                national_qual = bool(val_nat)  # Nur TRUE erlaubt
+                if national_qual and discipline_lower not in ["3m synchro", "turm synchro"]:
+                    nationalteam = "yes" if percent is not None and percent >= 90 else "no"
                     supabase.table('compresults').update({
                         "NationalTeam": nationalteam
+                    }).eq("id", row["id"]).execute()
+                else:
+                    # explizit auf "no" setzen, wenn nicht qualifiziert
+                    supabase.table('compresults').update({
+                        "NationalTeam": "no"
                     }).eq("id", row["id"]).execute()
 
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
