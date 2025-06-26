@@ -3357,7 +3357,9 @@ def show_full_piste_results_clubs():
         "CompPointsRegionalTeam": "Competition RegionalTeam",
         "CompPointsNationalTeam": "Competition NationalTeam",
         "talentcard": "SOC",
-        "PisteYear": "Piste Year"
+        "PisteYear": "Piste Year",
+        "pisteminregio": "Piste Regional Min",
+        "pisteminnational": "Piste National Min"
     }
     # Füge fehlende Spalten als None hinzu
     for k in show_cols:
@@ -3384,11 +3386,26 @@ def show_full_piste_results_clubs():
         filtered = filtered[filtered["Piste Year"].astype(str) == year]
 
     st.dataframe(filtered)
+
+    # CSV-Export
     st.download_button(
         "📥 Gefilterte Ergebnisse als CSV",
         filtered.to_csv(index=False, encoding='utf-8-sig'),
         file_name="full_piste_results_clubs.csv",
         mime="text/csv"
+    )
+
+    # XLSX-Export
+    import io
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        filtered.to_excel(writer, index=False, sheet_name="Full PISTE Results Clubs")
+    output.seek(0)
+    st.download_button(
+        "📥 Gefilterte Ergebnisse als Excel",
+        output.getvalue(),
+        file_name="full_piste_results_clubs.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
 # Hauptmenü
