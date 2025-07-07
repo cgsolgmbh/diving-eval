@@ -3422,7 +3422,6 @@ def show_full_piste_results_clubs():
 
     # Spalten umbenennen und zusammenstellen
     show_cols = {
-        "PisteYear": "Piste Year",
         "first_name": "First Name",
         "last_name": "Last Name",
         "birthdate": "Birthdate",
