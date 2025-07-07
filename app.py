@@ -3435,6 +3435,7 @@ def show_full_piste_results_clubs():
         "pisteminnational": "Piste Nat",
         "CompPointsNationalTeam": "Comp Nat",
         "talentcard": "SOC"
+
     }
     # Füge fehlende Spalten als None hinzu
     for k in show_cols:
