@@ -2585,7 +2585,7 @@ def soc_full_calculation():
                     if r['first_name'].strip().lower() == first_name.strip().lower()
                     and r['last_name'].strip().lower() == last_name.strip().lower()
                     and r.get('Competition') in comp_names
-                    and r.get('NationalTeam', '').lower() == 'yes'
+                    and str(r.get('NationalTeam') or '').lower() == 'yes'
                 ]
                 # Wert als "yes"/"no" speichern
                 athlete_data_map[key]["CompPointsNationalTeam"] = "yes" if relevant_results else "no"
