@@ -1550,8 +1550,8 @@ def piste_refpoint_wettkampf_analyse():
 
             colname = f"PisteRefPoints{selected_year}%"
             percent = row.get(colname)
-            if percent is None or percent == "":
-                continue  # Nur Zeilen mit Wert für das gewählte Jahr verarbeiten!
+            if percent is not None and percent != "":
+                continue  # Überspringe Zeilen, die schon einen Wert haben!
             discipline = row.get("Discipline")
             sex = row.get("sex")
             points = row.get("Points")
