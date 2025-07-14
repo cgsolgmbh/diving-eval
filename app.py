@@ -1825,9 +1825,9 @@ def piste_refpoint_wettkampf_analyse():
                 pointsaverageref = None
             data["pointsaverageref%"] = pointsaverageref
             supabase.table("pisterefcompresults").delete()\
-                .eq("first_name", data["first_name"])\
-                .eq("last_name", data["last_name"])\
-                .eq("PisteYear", data["PisteYear"]).execute()
+                .eq("first_name", first_name)\
+                .eq("last_name", last_name)\
+                .eq("PisteYear", piste_year).execute()
             supabase.table("pisterefcompresults").insert(data).execute()
             inserted += 1
         st.success(f"Top3-Auswertung abgeschlossen. {inserted} Einträge für {selected_year} gespeichert.")
@@ -3453,15 +3453,22 @@ def berechne_top3_wettkaempfe():
             top3 = group.head(3)
             if top3.empty:
                 continue
+            # Namen und Jahr robust als String/int
+            first_name = str(top3.iloc[0]['first_name']).strip()
+            last_name = str(top3.iloc[0]['last_name']).strip()
+            piste_year = int(selected_year)
             vintage = athlete_vintage.get((first, last))
             if not vintage:
                 continue
-            age = int(selected_year) - int(vintage)
+            try:
+                age = int(selected_year) - int(vintage)
+            except Exception:
+                age = None
             data = {
-                "first_name": top3.iloc[0]['first_name'],
-                "last_name": top3.iloc[0]['last_name'],
+                "first_name": first_name,
+                "last_name": last_name,
                 "age": age,
-                "PisteYear": int(selected_year),
+                "PisteYear": piste_year,
             }
             for i in range(1, 4):
                 if len(top3) >= i:
@@ -3475,11 +3482,13 @@ def berechne_top3_wettkaempfe():
                     data[f"discipline{i}"] = None
                     data[f"points{i}"] = None
                     data[f"reference{i}"] = None
-            # Alte Einträge löschen und neuen speichern
+            # Debug-Ausgabe (optional, zum Testen)
+            # st.write("Lösche/Insert Top3 für:", first_name, last_name, piste_year)
+            # Alte Einträge löschen und neuen speichern (immer robust als String/int)
             supabase.table("pisterefcompresults").delete()\
-                .eq("first_name", data["first_name"])\
-                .eq("last_name", data["last_name"])\
-                .eq("PisteYear", data["PisteYear"]).execute()
+                .eq("first_name", first_name)\
+                .eq("last_name", last_name)\
+                .eq("PisteYear", piste_year).execute()
             supabase.table("pisterefcompresults").insert(data).execute()
             inserted += 1
 
