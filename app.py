@@ -1687,33 +1687,45 @@ def piste_refpoint_wettkampf_analyse():
     ref_col = f"PisteRefPoints{selected_year}%"
     compresults = fetch_all_rows('compresults', select='*')
     df = pd.DataFrame(compresults)
-    competitions = supabase.table('competitions').select('Name, PisteYear').execute().data
-    comp_map = {c['Name']: c.get('PisteYear') for c in competitions}
-    df["PisteYear"] = df["Competition"].map(comp_map)
+    if ref_col not in df.columns:
+        st.error(f"Spalte {ref_col} nicht gefunden!")
+    else:
+        competitions = supabase.table('competitions').select('Name, PisteYear').execute().data
+        comp_map = {c['Name']: c.get('PisteYear') for c in competitions}
+        df["PisteYear"] = df["Competition"].map(comp_map)
+        athletes = supabase.table('athletes').select('first_name, last_name, vintage').execute().data
+        athlete_vintage = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a['vintage'] for a in athletes}
+        pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
+        pisterefcomppoints_df = pd.DataFrame(pisterefcomppoints)
 
-    # Filter: Nur Wettkämpfe mit PisteYear == ausgewähltes Jahr!
-    df = df[df["PisteYear"] == int(selected_year)]
+        # Altersberechnung
+        df["age"] = df.apply(lambda r: int(selected_year) - int(r["vintage"]) if r.get("vintage") else None, axis=1)
+        # Ausschluss Synchro etc.
+        df = df[~df.apply(lambda r: is_excluded_discipline_local(r.get("Discipline"), r.get("age"), selected_year, agecat_df), axis=1)]
 
-    grouped = df[df[ref_col].notnull() & (df[ref_col] != "")].groupby([
-        df['first_name'].str.strip().str.lower(),
-        df['last_name'].str.strip().str.lower()
-    ])
-    inserted = 0
-    for (first, last), group in grouped:
-        group = group.sort_values(ref_col, ascending=False)
-        top3 = group.head(3)
-        if top3.empty:
-            continue
-        vintage = athlete_vintage.get((first, last))
-        if not vintage:
-            continue
-        age = int(selected_year) - int(vintage)
-        data = {
-            "first_name": top3.iloc[0]['first_name'],
-            "last_name": top3.iloc[0]['last_name'],
-            "age": age,
-            "PisteYear": int(selected_year),  # Das Analysejahr!
-        }
+        # --- NEU: Nur Wettkämpfe mit PisteYear == ausgewähltes Jahr ---
+        df = df[df["PisteYear"] == int(selected_year)]
+
+        grouped = df[df[ref_col].notnull() & (df[ref_col] != "")].groupby([
+            df['first_name'].str.strip().str.lower(),
+            df['last_name'].str.strip().str.lower()
+        ])
+        inserted = 0
+        for (first, last), group in grouped:
+            group = group.sort_values(ref_col, ascending=False)
+            top3 = group.head(3)
+            if top3.empty:
+                continue
+            vintage = athlete_vintage.get((first, last))
+            if not vintage:
+                continue
+            age = int(selected_year) - int(vintage)
+            data = {
+                "first_name": top3.iloc[0]['first_name'],
+                "last_name": top3.iloc[0]['last_name'],
+                "age": age,
+                "PisteYear": int(selected_year),
+            }
             pointsaverage = []
             for i in range(1, 4):
                 if len(top3) >= i:
