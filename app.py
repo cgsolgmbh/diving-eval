@@ -1595,6 +1595,13 @@ def piste_refpoint_wettkampf_analyse():
                 }).eq("id", row["id"]).execute()
                 continue
 
+            category = str(row.get("CategoryStart", "")).strip().lower()
+            if category == "elite":
+                supabase.table('compresults').update({
+                    "NationalTeam": "no"
+                }).eq("id", row["id"]).execute()
+                continue
+
             discipline = row.get("Discipline")
             sex = row.get("sex")
             points = row.get("Points")
@@ -1605,9 +1612,6 @@ def piste_refpoint_wettkampf_analyse():
                 continue
 
             if is_excluded_discipline_local(discipline, age, selected_year, agecat_df):
-                supabase.table('compresults').update({
-                    "NationalTeam": "no"
-                }).eq("id", row["id"]).execute()
                 supabase.table('compresults').update({
                     "NationalTeam": "no"
                 }).eq("id", row["id"]).execute()
@@ -1705,11 +1709,6 @@ def piste_refpoint_wettkampf_analyse():
 
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
-    st.markdown("---")
-    st.subheader("🏆 Top 3 Wettkämpfe separat berechnen")
-
-    if st.button("Top 3 berechnen"):
-        berechne_top3_wettkaempfe()
 
     # ... im Top3-Abschnitt:
     ref_col = f"PisteRefPoints{selected_year}%"
@@ -1825,9 +1824,9 @@ def piste_refpoint_wettkampf_analyse():
                 pointsaverageref = None
             data["pointsaverageref%"] = pointsaverageref
             supabase.table("pisterefcompresults").delete()\
-                .eq("first_name", first_name)\
-                .eq("last_name", last_name)\
-                .eq("PisteYear", piste_year).execute()
+                .eq("first_name", data["first_name"])\
+                .eq("last_name", data["last_name"])\
+                .eq("PisteYear", data["PisteYear"]).execute()
             supabase.table("pisterefcompresults").insert(data).execute()
             inserted += 1
         st.success(f"Top3-Auswertung abgeschlossen. {inserted} Einträge für {selected_year} gespeichert.")
@@ -3389,110 +3388,6 @@ def athleten_eingeben():
                 'bioage': bioage
             }).execute()
             st.success(f"Athlet {full_name} gespeichert!")
-
-def berechne_top3_wettkaempfe():
-    st.header("🏆 Top 3 Wettkämpfe berechnen (nur qual-Piste=TRUE)")
-
-    years = [str(y) for y in range(2024, 2031)]
-    selected_year = st.selectbox("Jahr für Top3-Berechnung wählen", years, key="top3_jahr")
-
-    if st.button("Top3 berechnen"):
-        st.info("Starte Top3-Berechnung ...")
-
-        # Daten laden
-        competitions = supabase.table('competitions').select('Name, PisteYear, qual-Piste').execute().data
-        comp_map = {c['Name']: c for c in competitions}
-        comp_piste_map = {c['Name']: c.get('qual-Piste', False) for c in competitions}
-
-        compresults = fetch_all_rows('compresults', select='*')
-        df = pd.DataFrame(compresults)
-
-        # Mapping Competition → PisteYear
-        df["PisteYear"] = df["Competition"].map(lambda x: comp_map.get(x, {}).get("PisteYear"))
-        # Mapping Competition → qual-Piste
-        df["qual_Piste"] = df["Competition"].map(lambda x: comp_piste_map.get(x, False))
-
-        # Filter auf gewähltes Jahr und qual-Piste==True
-        ref_col = f"PisteRefPoints{selected_year}%"
-        if ref_col not in df.columns:
-            st.error(f"Spalte {ref_col} nicht gefunden!")
-            return
-
-        df = df[
-            (df["PisteYear"] == int(selected_year)) &
-            (df["qual_Piste"] == True) &
-            (df[ref_col].notnull()) & (df[ref_col] != "")
-        ]
-
-        if df.empty:
-            st.info("Keine passenden Ergebnisse für Top3-Berechnung gefunden.")
-            return
-
-        # Altersberechnung (optional, falls benötigt)
-        athletes = supabase.table('athletes').select('first_name, last_name, vintage').execute().data
-        athlete_vintage = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a['vintage'] for a in athletes}
-        df["age"] = df.apply(
-            lambda r: int(selected_year) - int(athlete_vintage.get((str(r.get("first_name")).strip().lower(), str(r.get("last_name")).strip().lower()), 0))
-            if athlete_vintage.get((str(r.get("first_name")).strip().lower(), str(r.get("last_name")).strip().lower())) else None,
-            axis=1
-        )
-
-        # Ausschluss-Logik (optional, falls du sie brauchst)
-        agecategories = supabase.table("agecategories").select("*").execute().data
-        agecat_df = pd.DataFrame(agecategories)
-        df = df[~df.apply(lambda r: is_excluded_discipline_local(r.get("Discipline"), r.get("age"), selected_year, agecat_df), axis=1)]
-
-        # Top3-Berechnung
-        grouped = df.groupby([
-            df['first_name'].str.strip().str.lower(),
-            df['last_name'].str.strip().str.lower()
-        ])
-        inserted = 0
-        for (first, last), group in grouped:
-            group = group.sort_values(ref_col, ascending=False)
-            top3 = group.head(3)
-            if top3.empty:
-                continue
-            # Namen und Jahr robust als String/int
-            first_name = str(top3.iloc[0]['first_name']).strip()
-            last_name = str(top3.iloc[0]['last_name']).strip()
-            piste_year = int(selected_year)
-            vintage = athlete_vintage.get((first, last))
-            if not vintage:
-                continue
-            try:
-                age = int(selected_year) - int(vintage)
-            except Exception:
-                age = None
-            data = {
-                "first_name": first_name,
-                "last_name": last_name,
-                "age": age,
-                "PisteYear": piste_year,
-            }
-            for i in range(1, 4):
-                if len(top3) >= i:
-                    row = top3.iloc[i-1]
-                    data[f"competition{i}"] = row.get("Competition")
-                    data[f"discipline{i}"] = row.get("Discipline")
-                    data[f"points{i}"] = row.get("Points")
-                    data[f"reference{i}"] = row.get(ref_col)
-                else:
-                    data[f"competition{i}"] = None
-                    data[f"discipline{i}"] = None
-                    data[f"points{i}"] = None
-                    data[f"reference{i}"] = None
-            # Debug-Ausgabe (optional, zum Testen)
-            # st.write("Lösche/Insert Top3 für:", first_name, last_name, piste_year)
-            # Alte Einträge löschen und neuen speichern (immer robust als String/int)
-            supabase.table("pisterefcompresults").delete()\
-                .eq("first_name", first_name)\
-                .eq("last_name", last_name)\
-                .eq("PisteYear", piste_year).execute()
-            supabase.table("pisterefcompresults").insert(data).execute()
-            inserted += 1
-
-        st.success(f"Top3-Auswertung abgeschlossen. {inserted} Einträge für {selected_year} gespeichert.")
 
 def show_full_piste_results_clubs():
     st.header("📊 Full PISTE Results for Clubs")
