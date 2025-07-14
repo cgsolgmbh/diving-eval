@@ -1508,10 +1508,8 @@ def safe_numeric(val):
 def piste_refpoint_wettkampf_analyse():
     st.header("📊 Piste RefPoint Wettkampf Analyse")
 
-    # Lade die agecategories-Tabelle EINMAL am Anfang der Funktion:
     agecategories = supabase.table("agecategories").select("*").execute().data
     agecat_df = pd.DataFrame(agecategories)
-
     selectionpoints = fetch_all_rows('selectionpoints')
     sel_df = pd.DataFrame(selectionpoints)
 
@@ -1535,16 +1533,15 @@ def piste_refpoint_wettkampf_analyse():
         athletes = supabase.table('athletes').select('id, vintage, first_name, last_name').execute().data
         pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
 
-        comp_lookup = {c['Name']: c.get('PisteYear') for c in competitions}
         comp_qual_lookup = {str(c['Name']).strip().lower(): c for c in competitions}
         athlete_vintage = {a['id']: a['vintage'] for a in athletes}
         athlete_name_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a['vintage'] for a in athletes}
         refpoints_df = pd.DataFrame(pisterefcomppoints)
 
+        updates = []
         updated = 0
 
         for row in compresults:
-
             competition_name = str(row.get("Competition", "")).strip().lower()
             comp_row = comp_qual_lookup.get(competition_name, {})
 
@@ -1552,21 +1549,15 @@ def piste_refpoint_wettkampf_analyse():
             percent = row.get(colname)
             if percent is not None and percent != "":
                 continue  # Überspringe Zeilen, die schon einen Wert haben!
+
             discipline = row.get("Discipline")
             sex = row.get("sex")
             points = row.get("Points")
-            age = None
-            ref_row = None
-            comp_row = comp_qual_lookup.get(competition_name, {})
-            # Hole das Jahr aus dem Datum (z.B. "2025-06-21" → 2025)
             comp_date = comp_row.get("Date")
             if comp_date:
                 comp_year = int(str(comp_date)[:4])
             else:
-                # Fallback: PisteYear oder selected_year_int
                 comp_year = comp_row.get("PisteYear") or selected_year_int
-
-            is_current_year = str(comp_year) == selected_year
 
             athlete_id = row.get("athlete_id")
             vintage = None
@@ -1577,44 +1568,24 @@ def piste_refpoint_wettkampf_analyse():
                 last = row.get("last_name", "").strip().lower()
                 vintage = athlete_name_lookup.get((first, last))
             if not vintage:
-                supabase.table('compresults').update({
-                    "NationalTeam": "no"
-                }).eq("id", row["id"]).execute()
                 continue
 
             try:
                 age = int(comp_year) - int(vintage)
             except Exception:
-                supabase.table('compresults').update({
-                    "NationalTeam": "no"
-                }).eq("id", row["id"]).execute()
                 continue
+
             if not (8 <= age <= 19):
-                supabase.table('compresults').update({
-                    "NationalTeam": "no"
-                }).eq("id", row["id"]).execute()
                 continue
 
             category = str(row.get("CategoryStart", "")).strip().lower()
             if category == "elite":
-                supabase.table('compresults').update({
-                    "NationalTeam": "no"
-                }).eq("id", row["id"]).execute()
                 continue
 
-            discipline = row.get("Discipline")
-            sex = row.get("sex")
-            points = row.get("Points")
             if not (discipline and sex and points):
-                supabase.table('compresults').update({
-                    "NationalTeam": "no"
-                }).eq("id", row["id"]).execute()
                 continue
 
             if is_excluded_discipline_local(discipline, age, selected_year, agecat_df):
-                supabase.table('compresults').update({
-                    "NationalTeam": "no"
-                }).eq("id", row["id"]).execute()
                 continue
 
             ref_row = refpoints_df[
@@ -1633,16 +1604,14 @@ def piste_refpoint_wettkampf_analyse():
                 percent = None
                 continue
 
-            is_current_year = str(comp_year) == selected_year
-
-            colname = f"PisteRefPoints{selected_year}%"
-            supabase.table('compresults').update({
+            # Sammle Update für Batch
+            updates.append({
+                "id": row["id"],
                 colname: percent
-            }).eq("id", row["id"]).execute()
+            })
             updated += 1
 
             # --- RegionalTeam ---
-            category = row.get("CategoryStart", "").strip().lower()
             discipline_lower = discipline.strip().lower()
             val = comp_row.get("qual-Regional", False)
             regional_qual = bool(val)
@@ -1654,9 +1623,7 @@ def piste_refpoint_wettkampf_analyse():
                 regionalteam = "yes"
             else:
                 regionalteam = "no"
-            supabase.table('compresults').update({
-                "RegionalTeam": regionalteam
-            }).eq("id", row["id"]).execute()
+            updates[-1]["RegionalTeam"] = regionalteam
 
             # --- NationalTeam ---
             val_nat = comp_row.get("qual-National", False)
@@ -1669,7 +1636,6 @@ def piste_refpoint_wettkampf_analyse():
 
             if national_qual and not excluded_synchro_nat:
                 if category in ["jugend c", "jugend d"]:
-                    # Referenzwert aus pisterefcomppoints
                     ref_row_nt = refpoints_df[
                         (refpoints_df["Discipline"].astype(str).str.lower() == discipline_lower) &
                         (refpoints_df["sex"].astype(str).str.lower() == sex.strip().lower())
@@ -1683,7 +1649,6 @@ def piste_refpoint_wettkampf_analyse():
                         except Exception:
                             percent_nt = None
                 else:
-                    # Referenzwert aus selectionpoints (Competition="JEM")
                     sel_row_nt = sel_df[
                         (sel_df["Competition"].astype(str).str.lower() == "jem") &
                         (sel_df["category"].astype(str).str.lower() == category) &
@@ -1702,13 +1667,16 @@ def piste_refpoint_wettkampf_analyse():
                 nationalteam = "yes" if percent_nt is not None and percent_nt >= 90 else "no"
             else:
                 nationalteam = "no"
+            updates[-1]["NationalTeam"] = nationalteam
 
-            supabase.table('compresults').update({
-                "NationalTeam": nationalteam
-            }).eq("id", row["id"]).execute()
+        # --- Batch-Update ---
+        batch_size = 500
+        for i in range(0, len(updates), batch_size):
+            batch = updates[i:i+batch_size]
+            for entry in batch:
+                supabase.table('compresults').update(entry).eq("id", entry["id"]).execute()
 
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
-
 
     # ... im Top3-Abschnitt:
     ref_col = f"PisteRefPoints{selected_year}%"
