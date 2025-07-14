@@ -2349,42 +2349,34 @@ def soc_full_calculation():
     if st.button("SOC Full Calculation starten"):
         pisteyear = int(selected_year)
 
-        # Alle Athleten laden (jetzt inkl. bioage)
         athletes = supabase.table('athletes').select('id, first_name, last_name, birthdate, sex, vintage, bioage').execute().data
         athletes_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a for a in athletes}
 
-        # pisterefcompresults laden (enthält refaverage, performance, pointsaverageref%)
         refcompresults = fetch_all_rows('pisterefcompresults', select='*', PisteYear=pisteyear)
         refcompresults_df = pd.DataFrame(refcompresults)
 
-        # pistedisciplines laden
         pistedisciplines = supabase.table('pistedisciplines').select('id, name').execute().data
-        # IDs für die Scoretables
         comp_perf_id = next((d['id'] for d in pistedisciplines if d['name'] == "CompPerfPointsCalc"), None)
         comp_quality_id = next((d['id'] for d in pistedisciplines if d['name'] == "CompPerfQualityCalc"), None)
         comp_enhance_id = next((d['id'] for d in pistedisciplines if d['name'] == "CompPerfEnhance"), None)
         pistetotalinpoints_id = next((d['id'] for d in pistedisciplines if d['name'] == "PisteTotalinPoints"), None)
         if not (comp_perf_id and comp_quality_id and comp_enhance_id and pistetotalinpoints_id):
-            st.error("Eine oder mehrere Disziplinen (CompPerfPointsCalc, CompPerfQualityCalc, CompPerfEnhance, PisteTotalinPoints) fehlen!")
+            st.error("Eine oder mehrere Disziplinen fehlen!")
             return
 
-        # Scoretables laden
         scoretables = fetch_all_rows('scoretables', select='*', discipline_id=comp_perf_id)
         scoretables_quality = fetch_all_rows('scoretables', select='*', discipline_id=comp_quality_id)
         scoretables_enhance = fetch_all_rows('scoretables', select='*', discipline_id=comp_enhance_id)
 
-        # Piste-Resultate laden
         piste_results = fetch_all_rows("pisteresults", select="athlete_id, discipline_id, points, raw_result, TestYear")
         piste_results_df = pd.DataFrame(piste_results)
 
-        # Bestehende socadditionalvalues laden (für Update/Insert)
         existing_rows = fetch_all_rows("socadditionalvalues", select="*")
         existing_lookup = {
             (row['first_name'], row['last_name'], row['PisteYear']): row
             for row in existing_rows
         }
 
-        # --- Sammle alle Daten pro Athlet/Jahr ---
         athlete_data_map = {}
 
         for _, row in refcompresults_df.iterrows():
@@ -2405,13 +2397,11 @@ def soc_full_calculation():
                     "Category": get_category_from_agecategories(athlete.get('vintage'), pisteyear, agecategories)
                 }
 
-            # --- NEU: bioagevalue berechnen und speichern ---
             bioage = athlete.get("bioage")
             bioage_map = {"q1": -1, "q2": -0.5, "q3": 0.5, "q4": 1}
             bioagevalue = bioage_map.get(str(bioage).lower(), 0) if bioage else 0
             athlete_data_map[key]["bioagevalue"] = bioagevalue
 
-            # --- NEU: Mirwald-Wert holen und speichern ---
             mirwald_rows = supabase.table("pistemirwald").select("bioentwstand").eq("first_name", athlete['first_name']).eq("last_name", athlete['last_name']).eq("PisteYear", pisteyear).execute().data
             mirwald_map = {3: 1, 2: 0, 1: -1}
             mirwaldvalue = 0
@@ -2423,12 +2413,10 @@ def soc_full_calculation():
                     mirwaldvalue = 0
             athlete_data_map[key]["mirwaldvalue"] = mirwaldvalue
 
-            # Tool Environment Wert aus pisteenvironment holen
             env_row = supabase.table("pisteenvironment").select("toolenvvalue").eq("first_name", athlete['first_name']).eq("last_name", athlete['last_name']).eq("PisteYear", pisteyear).execute().data
             if env_row:
                 athlete_data_map[key]["toolenvironment"] = env_row[0].get("toolenvvalue")
 
-            # Trainingsperformance/Resilienz aus trainingsperformance holen
             trainings_row = supabase.table("trainingsperformance").select("*")\
                 .eq("first_name", athlete['first_name'])\
                 .eq("last_name", athlete['last_name'])\
@@ -2437,7 +2425,6 @@ def soc_full_calculation():
                 t = trainings_row[0]
                 athlete_data_map[key]["trainingperf"] = sum([t.get("q2", 0), t.get("q3", 0), t.get("q4", 0), t.get("q5", 0), t.get("q7", 0), t.get("q8", 0), t.get("q9", 0), t.get("q10", 0)])
                 athlete_data_map[key]["resilience"] = t.get("q1", 0) + t.get("q6", 0)
-                # Hier wird der Referenzwert berechnet:
                 athlete_data_map[key]["trainingsince"] = get_trainingsince_value(
                     pisteyear,
                     t.get("trainingsince"),
@@ -2451,7 +2438,6 @@ def soc_full_calculation():
                     athlete['last_name']
                 )
 
-            # competitions
             refaverage = row.get('refaverage')
             if refaverage not in (None, "", "nan"):
                 note = None
@@ -2467,18 +2453,10 @@ def soc_full_calculation():
                     pass
                 athlete_data_map[key]["competitions"] = note
 
-            # --- Piste: Bewertung des Durchschnitts (PistePointsDurchschnitt) mit Scoretabelle von PisteTotalinPoints ---
             pistepointsdurchschnitt_id = next((d['id'] for d in pistedisciplines if d['name'].strip().lower() == "pistepointsdurchschnitt"), None)
             pistetotalinpoints_id = next((d['id'] for d in pistedisciplines if d['name'] == "PisteTotalinPoints"), None)
             scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
 
-            # piste
-            # --- IDs der Disziplinen holen ---
-            pistepointsdurchschnitt_id = next((d['id'] for d in pistedisciplines if d['name'].strip().lower() == "pistepointsdurchschnitt"), None)
-            pistetotalinpoints_id = next((d['id'] for d in pistedisciplines if d['name'] == "PisteTotalinPoints"), None)
-            scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
-
-            # --- Wert aus raw_result nach points übertragen (nur für PistePointsDurchschnitt) ---
             piste_result = piste_results_df[
                 (piste_results_df['athlete_id'].astype(str) == str(athlete['id'])) &
                 (piste_results_df['discipline_id'].astype(str) == str(pistepointsdurchschnitt_id)) &
@@ -2491,7 +2469,6 @@ def soc_full_calculation():
                         .eq("athlete_id", athlete['id'])\
                         .eq("discipline_id", pistepointsdurchschnitt_id)\
                         .eq("TestYear", pisteyear).execute()
-                    # Optional: auch im DataFrame aktualisieren
                     piste_results_df.loc[
                         (piste_results_df['athlete_id'].astype(str) == str(athlete['id'])) &
                         (piste_results_df['discipline_id'].astype(str) == str(pistepointsdurchschnitt_id)) &
@@ -2499,8 +2476,6 @@ def soc_full_calculation():
                         'points'
                     ] = raw_val
 
-            # --- piste: Bewertung des Durchschnitts (PistePointsDurchschnitt) mit Scoretabelle von PisteTotalinPoints ---
-            # Jetzt wie gehabt den Wert aus points holen:
             piste_result = piste_results_df[
                 (piste_results_df['athlete_id'].astype(str) == str(athlete['id'])) &
                 (piste_results_df['discipline_id'].astype(str) == str(pistepointsdurchschnitt_id)) &
@@ -2508,7 +2483,7 @@ def soc_full_calculation():
             ]
             piste_value = None
             if not piste_result.empty:
-                avg_points = piste_result.iloc[0]['points']  # jetzt steht der Wert sicher in points!
+                avg_points = piste_result.iloc[0]['points']
                 avg_points_rounded = round(float(avg_points), 1)
                 for row_score in scoretable_rows:
                     try:
@@ -2521,7 +2496,6 @@ def soc_full_calculation():
                         continue
             athlete_data_map[key]["piste"] = piste_value
 
-            # compenhancement
             performance = row.get('performance')
             if performance not in (None, "", "nan"):
                 compenhance = None
@@ -2537,7 +2511,6 @@ def soc_full_calculation():
                     pass
                 athlete_data_map[key]["compenhancement"] = compenhance
 
-            # quality
             pointsaverageref = row.get('pointsaverageref%')
             if pointsaverageref not in (None, "", "nan"):
                 note_quality = None
@@ -2553,50 +2526,53 @@ def soc_full_calculation():
                     pass
                 athlete_data_map[key]["quality"] = note_quality
 
-            # CompPointsNationalTeam setzen, falls NationalTeam=yes in compresults für das Jahr ---
-            competitions = supabase.table('competitions').select('Name, PisteYear').eq('PisteYear', pisteyear).execute().data
-            comp_names = set(c['Name'] for c in competitions)
-            compresults = fetch_all_rows('compresults', select='first_name, last_name, Competition, NationalTeam')
+        competitions = supabase.table('competitions').select('Name, PisteYear').eq('PisteYear', pisteyear).execute().data
+        comp_names = set(c['Name'] for c in competitions)
+        compresults = fetch_all_rows('compresults', select='first_name, last_name, Competition, NationalTeam')
+        for key in athlete_data_map:
+            first_name, last_name, year = key
+            relevant_results = [
+                r for r in compresults
+                if r['first_name'].strip().lower() == first_name.strip().lower()
+                and r['last_name'].strip().lower() == last_name.strip().lower()
+                and r.get('Competition') in comp_names
+                and str(r.get('NationalTeam') or '').lower() == 'yes'
+            ]
+            athlete_data_map[key]["CompPointsNationalTeam"] = "yes" if relevant_results else "no"
 
-            # Für jeden Athlet/Jahr prüfen, ob NationalTeam=yes in einem relevanten Wettkampf
-            for key in athlete_data_map:
-                first_name, last_name, year = key
-                relevant_results = [
-                    r for r in compresults
-                    if r['first_name'].strip().lower() == first_name.strip().lower()
-                    and r['last_name'].strip().lower() == last_name.strip().lower()
-                    and r.get('Competition') in comp_names
-                    and str(r.get('NationalTeam') or '').lower() == 'yes'
-                ]
-                # Wert als "yes"/"no" speichern
-                athlete_data_map[key]["CompPointsNationalTeam"] = "yes" if relevant_results else "no"
+        compresults_regio = fetch_all_rows('compresults', select='first_name, last_name, Competition, RegionalTeam')
+        for key in athlete_data_map:
+            first_name, last_name, year = key
+            relevant_results_regio = [
+                r for r in compresults_regio
+                if isinstance(r, dict)
+                and r.get('first_name', '').strip().lower() == first_name.strip().lower()
+                and r.get('last_name', '').strip().lower() == last_name.strip().lower()
+                and r.get('Competition') in comp_names
+                and str(r.get('RegionalTeam') or '').strip().lower() == 'yes'
+            ]
+            athlete_data_map[key]["CompPointsRegionalTeam"] = "yes" if relevant_results_regio else "no"
 
-            # CompPointsRegionalTeam setzen, falls RegionalTeam=yes in compresults für das Jahr ---
-            compresults_regio = fetch_all_rows('compresults', select='first_name, last_name, Competition, RegionalTeam')
-            for key in athlete_data_map:
-                first_name, last_name, year = key
-                relevant_results_regio = [
-                    r for r in compresults_regio
-                    if isinstance(r, dict)
-                    and r.get('first_name', '').strip().lower() == first_name.strip().lower()
-                    and r.get('last_name', '').strip().lower() == last_name.strip().lower()
-                    and r.get('Competition') in comp_names
-                    and str(r.get('RegionalTeam') or '').strip().lower() == 'yes'
-                ]
-                athlete_data_map[key]["CompPointsRegionalTeam"] = "yes" if relevant_results_regio else "no"
-
-        # --- Jetzt alle Daten in socadditionalvalues schreiben ---
-        inserted = 0
+        # --- Jetzt alle Daten in socadditionalvalues schreiben (Batch) ---
+        updates = []
         for key, data in athlete_data_map.items():
             existing = existing_lookup.get(key)
             if existing:
-                supabase.table("socadditionalvalues").update(data)\
-                    .eq("first_name", data['first_name'])\
-                    .eq("last_name", data['last_name'])\
-                    .eq("PisteYear", data['PisteYear']).execute()
+                updates.append(("update", data))
             else:
-                supabase.table("socadditionalvalues").insert(data).execute()
-            inserted += 1
+                updates.append(("insert", data))
+
+        batch_size = 500
+        for i in range(0, len(updates), batch_size):
+            batch = updates[i:i+batch_size]
+            for action, data in batch:
+                if action == "update":
+                    supabase.table("socadditionalvalues").update(data)\
+                        .eq("first_name", data['first_name'])\
+                        .eq("last_name", data['last_name'])\
+                        .eq("PisteYear", data['PisteYear']).execute()
+                else:
+                    supabase.table("socadditionalvalues").insert(data).execute()
 
         # --- totalpoints berechnen und speichern ---
         fields = [
@@ -2624,12 +2600,10 @@ def soc_full_calculation():
                     .eq("PisteYear", data['PisteYear']).execute()
 
         # --- pisterefminpoints-Check: pisteminregio und pisteminnational setzen ---
-        # Lade Referenztabelle
         refminpoints = supabase.table("pisterefminpoints").select("*").execute().data
         refminpoints_df = pd.DataFrame(refminpoints)
 
         for key, data in athlete_data_map.items():
-            # Hole totalpoints und vintage/age
             row = supabase.table("socadditionalvalues").select("totalpoints", "birthdate", "PisteYear")\
                 .eq("first_name", data['first_name'])\
                 .eq("last_name", data['last_name'])\
@@ -2644,7 +2618,6 @@ def soc_full_calculation():
             vintage = int(str(birthdate)[:4])
             age = pisteyear - vintage
 
-            # Hole Referenzwerte für dieses Alter
             ref_row = refminpoints_df[refminpoints_df["age"].astype(str) == str(age)]
             if ref_row.empty:
                 continue
@@ -2671,7 +2644,6 @@ def soc_full_calculation():
 
         # --- Talentcard berechnen und speichern ---
         for key, data in athlete_data_map.items():
-            # Hole aktuelle Werte aus socadditionalvalues
             row = supabase.table("socadditionalvalues").select(
                 "pisteminregio", "pisteminnational", "CompPointsNationalTeam", "CompPointsRegionalTeam"
             ).eq("first_name", data['first_name'])\
@@ -2699,7 +2671,7 @@ def soc_full_calculation():
             .eq("last_name", data['last_name'])\
             .eq("PisteYear", data['PisteYear']).execute()
 
-        st.success(f"Berechnung abgeschlossen. {inserted} Einträge für {selected_year} aktualisiert.")
+        st.success(f"Berechnung abgeschlossen und alle Einträge für {selected_year} aktualisiert.")
 
 def show_full_piste_results_soc():
     st.header("📊 Full PISTE Results SOC")
