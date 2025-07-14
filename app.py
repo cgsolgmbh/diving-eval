@@ -1546,7 +1546,7 @@ def piste_refpoint_wettkampf_analyse():
             comp_row = comp_qual_lookup.get(competition_name, {})
             comp_pisteyear = comp_row.get("PisteYear")
 
-            # NEU: Nur Wettkämpfe mit passendem PisteYear verarbeiten!
+            # Nur Wettkämpfe mit passendem PisteYear verarbeiten!
             if str(comp_pisteyear) != str(selected_year):
                 continue
 
