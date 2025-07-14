@@ -1675,6 +1675,7 @@ def piste_refpoint_wettkampf_analyse():
             batch = updates[i:i+batch_size]
             for entry in batch:
                 supabase.table('compresults').update(entry).eq("id", entry["id"]).execute()
+            st.write(f"Batch {i//batch_size+1} verarbeitet")  # Fortschritt nach jedem Batch
 
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
