@@ -1684,132 +1684,132 @@ def piste_refpoint_wettkampf_analyse():
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
 
-    # ... im Top3-Abschnitt:
-    ref_col = f"PisteRefPoints{selected_year}%"
-    compresults = fetch_all_rows('compresults', select='*')
-    df = pd.DataFrame(compresults)
-    if ref_col not in df.columns:
-        st.error(f"Spalte {ref_col} nicht gefunden!")
-    else:
-        competitions = supabase.table('competitions').select('Name, PisteYear').execute().data
-        comp_map = {c['Name']: c.get('PisteYear') for c in competitions}
-        df["PisteYear"] = df["Competition"].map(comp_map)
-        athletes = supabase.table('athletes').select('first_name, last_name, vintage').execute().data
-        athlete_vintage = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a['vintage'] for a in athletes}
-        pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
-        pisterefcomppoints_df = pd.DataFrame(pisterefcomppoints)
+        # ... im Top3-Abschnitt:
+        ref_col = f"PisteRefPoints{selected_year}%"
+        compresults = fetch_all_rows('compresults', select='*')
+        df = pd.DataFrame(compresults)
+        if ref_col not in df.columns:
+            st.error(f"Spalte {ref_col} nicht gefunden!")
+        else:
+            competitions = supabase.table('competitions').select('Name, PisteYear').execute().data
+            comp_map = {c['Name']: c.get('PisteYear') for c in competitions}
+            df["PisteYear"] = df["Competition"].map(comp_map)
+            athletes = supabase.table('athletes').select('first_name, last_name, vintage').execute().data
+            athlete_vintage = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a['vintage'] for a in athletes}
+            pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
+            pisterefcomppoints_df = pd.DataFrame(pisterefcomppoints)
 
-        # Altersberechnung
-        df["age"] = df.apply(lambda r: int(selected_year) - int(r["vintage"]) if r.get("vintage") else None, axis=1)
-        # Ausschluss Synchro etc.
-        df = df[~df.apply(lambda r: is_excluded_discipline_local(r.get("Discipline"), r.get("age"), selected_year, agecat_df), axis=1)]
+            # Altersberechnung
+            df["age"] = df.apply(lambda r: int(selected_year) - int(r["vintage"]) if r.get("vintage") else None, axis=1)
+            # Ausschluss Synchro etc.
+            df = df[~df.apply(lambda r: is_excluded_discipline_local(r.get("Discipline"), r.get("age"), selected_year, agecat_df), axis=1)]
 
-        # --- NEU: Elite ausschließen ---
-        df = df[df["CategoryStart"].str.strip().str.lower() != "elite"]
+            # --- NEU: Elite ausschließen ---
+            df = df[df["CategoryStart"].str.strip().str.lower() != "elite"]
 
-        # --- NEU: Nur Wettkämpfe mit PisteYear == ausgewähltes Jahr ---
-        df = df[df["PisteYear"] == int(selected_year)]
+            # --- NEU: Nur Wettkämpfe mit PisteYear == ausgewähltes Jahr ---
+            df = df[df["PisteYear"] == int(selected_year)]
 
-        grouped = df[df[ref_col].notnull() & (df[ref_col] != "")].groupby([
-            df['first_name'].str.strip().str.lower(),
-            df['last_name'].str.strip().str.lower()
-        ])
-        inserted = 0
-        for (first, last), group in grouped:
-            group = group.sort_values(ref_col, ascending=False)
-            top3 = group.head(3)
-            if top3.empty:
-                continue
-            vintage = athlete_vintage.get((first, last))
-            if not vintage:
-                continue
-            age = int(selected_year) - int(vintage)
-            data = {
-                "first_name": top3.iloc[0]['first_name'],
-                "last_name": top3.iloc[0]['last_name'],
-                "age": age,
-                "PisteYear": int(selected_year),
-            }
-            pointsaverage = []
-            for i in range(1, 4):
-                if len(top3) >= i:
-                    row = top3.iloc[i-1]
-                    data[f"competition{i}"] = row.get("Competition")
-                    data[f"discipline{i}"] = row.get("Discipline")
-                    data[f"points{i}"] = row.get("Points")
-                    data[f"reference{i}"] = row.get(ref_col)
-                    avg_points = None
-                    avg_row = df[
+            grouped = df[df[ref_col].notnull() & (df[ref_col] != "")].groupby([
+                df['first_name'].str.strip().str.lower(),
+                df['last_name'].str.strip().str.lower()
+            ])
+            inserted = 0
+            for (first, last), group in grouped:
+                group = group.sort_values(ref_col, ascending=False)
+                top3 = group.head(3)
+                if top3.empty:
+                    continue
+                vintage = athlete_vintage.get((first, last))
+                if not vintage:
+                    continue
+                age = int(selected_year) - int(vintage)
+                data = {
+                    "first_name": top3.iloc[0]['first_name'],
+                    "last_name": top3.iloc[0]['last_name'],
+                    "age": age,
+                    "PisteYear": int(selected_year),
+                }
+                pointsaverage = []
+                for i in range(1, 4):
+                    if len(top3) >= i:
+                        row = top3.iloc[i-1]
+                        data[f"competition{i}"] = row.get("Competition")
+                        data[f"discipline{i}"] = row.get("Discipline")
+                        data[f"points{i}"] = row.get("Points")
+                        data[f"reference{i}"] = row.get(ref_col)
+                        avg_points = None
+                        avg_row = df[
+                            (df['first_name'].str.strip().str.lower() == first) &
+                            (df['last_name'].str.strip().str.lower() == last) &
+                            (df['Competition'] == row.get("Competition")) &
+                            (df['Discipline'] == row.get("Discipline")) &
+                            (df['PisteYear'] == int(selected_year))
+                        ]
+                        if not avg_row.empty:
+                            avg_points = avg_row.iloc[0].get("AveragePoints")
+                        data[f"pointsaverage{i}"] = avg_points
+                        if avg_points not in (None, "", "nan"):
+                            try:
+                                pointsaverage.append(float(avg_points))
+                            except Exception:
+                                pass
+                    else:
+                        data[f"competition{i}"] = None
+                        data[f"discipline{i}"] = None
+                        data[f"points{i}"] = None
+                        data[f"reference{i}"] = None
+                        data[f"pointsaverage{i}"] = None
+                data["pointsaverageaverage"] = round(sum(pointsaverage) / len(pointsaverage), 2) if pointsaverage else None
+                refs = [data[f"reference{i}"] for i in range(1, 4) if data[f"reference{i}"] is not None]
+                try:
+                    refs = [float(r) for r in refs if r not in ("", None)]
+                    data["refaverage"] = round(sum(refs) / len(refs), 1) if refs else None
+                except Exception:
+                    data["refaverage"] = None
+                pointsaverageref = None
+                try:
+                    discipline = data.get("discipline1")
+                    if not discipline:
+                        discipline = top3.iloc[0].get("Discipline") if len(top3) > 0 else None
+                    sex = None
+                    cr_row = df[
                         (df['first_name'].str.strip().str.lower() == first) &
                         (df['last_name'].str.strip().str.lower() == last) &
-                        (df['Competition'] == row.get("Competition")) &
-                        (df['Discipline'] == row.get("Discipline")) &
                         (df['PisteYear'] == int(selected_year))
                     ]
-                    if not avg_row.empty:
-                        avg_points = avg_row.iloc[0].get("AveragePoints")
-                    data[f"pointsaverage{i}"] = avg_points
-                    if avg_points not in (None, "", "nan"):
-                        try:
-                            pointsaverage.append(float(avg_points))
-                        except Exception:
-                            pass
-                else:
-                    data[f"competition{i}"] = None
-                    data[f"discipline{i}"] = None
-                    data[f"points{i}"] = None
-                    data[f"reference{i}"] = None
-                    data[f"pointsaverage{i}"] = None
-            data["pointsaverageaverage"] = round(sum(pointsaverage) / len(pointsaverage), 2) if pointsaverage else None
-            refs = [data[f"reference{i}"] for i in range(1, 4) if data[f"reference{i}"] is not None]
-            try:
-                refs = [float(r) for r in refs if r not in ("", None)]
-                data["refaverage"] = round(sum(refs) / len(refs), 1) if refs else None
-            except Exception:
-                data["refaverage"] = None
-            pointsaverageref = None
-            try:
-                discipline = data.get("discipline1")
-                if not discipline:
-                    discipline = top3.iloc[0].get("Discipline") if len(top3) > 0 else None
-                sex = None
-                cr_row = df[
-                    (df['first_name'].str.strip().str.lower() == first) &
-                    (df['last_name'].str.strip().str.lower() == last) &
-                    (df['PisteYear'] == int(selected_year))
-                ]
-                if not cr_row.empty:
-                    sex = cr_row.iloc[0].get("sex")
-                if not sex or sex == "":
-                    athlete_row = [a for a in athletes if a['first_name'].strip().lower() == first and a['last_name'].strip().lower() == last]
-                    if athlete_row:
-                        sex = athlete_row[0].get("sex")
-                quality_col = f"quality{int(age)}"
-                ref_row = pisterefcomppoints_df[
-                    (pisterefcomppoints_df["Discipline"].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
-                    (pisterefcomppoints_df["sex"].astype(str).str.strip().str.lower() == str(sex).strip().lower())
-                ]
-                if not ref_row.empty and quality_col in ref_row.columns:
-                    ref_value = ref_row.iloc[0][quality_col]
-                    avg_val = data.get("pointsaverageaverage")
-                    if ref_value not in (None, "", "nan") and avg_val not in (None, "", "nan"):
-                        try:
-                            ref_value = float(ref_value)
-                            avg_val = float(avg_val)
-                            if ref_value != 0:
-                                pointsaverageref = round((avg_val / ref_value) * 100, 1)
-                        except Exception:
-                            pointsaverageref = None
-            except Exception:
-                pointsaverageref = None
-            data["pointsaverageref%"] = pointsaverageref
-            supabase.table("pisterefcompresults").delete()\
-                .eq("first_name", data["first_name"])\
-                .eq("last_name", data["last_name"])\
-                .eq("PisteYear", data["PisteYear"]).execute()
-            supabase.table("pisterefcompresults").insert(data).execute()
-            inserted += 1
-        st.success(f"Top3-Auswertung abgeschlossen. {inserted} Einträge für {selected_year} gespeichert.")
+                    if not cr_row.empty:
+                        sex = cr_row.iloc[0].get("sex")
+                    if not sex or sex == "":
+                        athlete_row = [a for a in athletes if a['first_name'].strip().lower() == first and a['last_name'].strip().lower() == last]
+                        if athlete_row:
+                            sex = athlete_row[0].get("sex")
+                    quality_col = f"quality{int(age)}"
+                    ref_row = pisterefcomppoints_df[
+                        (pisterefcomppoints_df["Discipline"].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
+                        (pisterefcomppoints_df["sex"].astype(str).str.strip().str.lower() == str(sex).strip().lower())
+                    ]
+                    if not ref_row.empty and quality_col in ref_row.columns:
+                        ref_value = ref_row.iloc[0][quality_col]
+                        avg_val = data.get("pointsaverageaverage")
+                        if ref_value not in (None, "", "nan") and avg_val not in (None, "", "nan"):
+                            try:
+                                ref_value = float(ref_value)
+                                avg_val = float(avg_val)
+                                if ref_value != 0:
+                                    pointsaverageref = round((avg_val / ref_value) * 100, 1)
+                            except Exception:
+                                pointsaverageref = None
+                except Exception:
+                    pointsaverageref = None
+                data["pointsaverageref%"] = pointsaverageref
+                supabase.table("pisterefcompresults").delete()\
+                    .eq("first_name", data["first_name"])\
+                    .eq("last_name", data["last_name"])\
+                    .eq("PisteYear", data["PisteYear"]).execute()
+                supabase.table("pisterefcompresults").insert(data).execute()
+                inserted += 1
+            st.success(f"Top3-Auswertung abgeschlossen. {inserted} Einträge für {selected_year} gespeichert.")
 
         # --- ENTWICKLUNG RECHNEN ---
         st.info("Starte: Entwicklung rechnen ...")
