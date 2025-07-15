@@ -1925,10 +1925,20 @@ def show_top3_wettkaempfe():
     alter = sorted(df["age"].dropna().unique())
     age = st.multiselect("Alter", alter, default=alter)
 
+    # --- Namensfilter ---
+    first_names = sorted(df["first_name"].dropna().unique())
+    last_names = sorted(df["last_name"].dropna().unique())
+    first_name_filter = st.text_input("Vorname (Teilstring möglich)", "")
+    last_name_filter = st.text_input("Nachname (Teilstring möglich)", "")
+
     if st.button("Show Results"):
         filtered = df[df["PisteYear"].isin(jahr)]
         if age:
             filtered = filtered[filtered["age"].isin(age)]
+        if first_name_filter:
+            filtered = filtered[filtered["first_name"].str.contains(first_name_filter, case=False, na=False)]
+        if last_name_filter:
+            filtered = filtered[filtered["last_name"].str.contains(last_name_filter, case=False, na=False)]
 
         rows = []
         for _, row in filtered.iterrows():
