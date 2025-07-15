@@ -1704,6 +1704,9 @@ def piste_refpoint_wettkampf_analyse():
         # Ausschluss Synchro etc.
         df = df[~df.apply(lambda r: is_excluded_discipline_local(r.get("Discipline"), r.get("age"), selected_year, agecat_df), axis=1)]
 
+        # --- NEU: Elite ausschließen ---
+        df = df[df["CategoryStart"].str.strip().str.lower() != "elite"]
+
         # --- NEU: Nur Wettkämpfe mit PisteYear == ausgewähltes Jahr ---
         df = df[df["PisteYear"] == int(selected_year)]
 
