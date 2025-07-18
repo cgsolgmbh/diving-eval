@@ -3317,8 +3317,8 @@ def athleten_eingeben():
     birthdate = st.date_input("Geburtsdatum", min_value=datetime.date(1920, 1, 1), max_value=datetime.date.today())
     sex = st.selectbox("Geschlecht", ["male", "female"])
 
-    teams = supabase.table('team').select('ShortName').execute().data
-    club_options = [t['ShortName'] for t in teams if t.get('ShortName')]
+    teams = supabase.table('team').select('FullName,ShortName').execute().data
+    club_options = [t['FullName'] for t in teams if t.get('FullName')]
     club = st.selectbox("Verein", club_options)
 
     nationalteam = st.selectbox("Nationalteam", ["yes", "no"])
