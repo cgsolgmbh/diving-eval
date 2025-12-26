@@ -381,6 +381,11 @@ def compute_compresult_team_flags(
         try:
             if x in (None, "", "nan"):
                 return None
+            if isinstance(x, str):
+                s = x.strip().replace("%", "").replace(",", ".")
+                if s == "":
+                    return None
+                return float(s)
             return float(x)
         except Exception:
             return None
@@ -1310,14 +1315,21 @@ def bewertung_wettkampf():
         if val in ("", None):
             return None
         try:
-            return float(val.replace("%", "")) if isinstance(val, str) and "%" in val else float(val)
+            if isinstance(val, str):
+                cleaned = val.replace("%", "").replace(",", ".").strip()
+                if cleaned == "":
+                    return None
+                return float(cleaned)
+            return float(val)
         except Exception:
             return None
 
     def get_status(selection_row, qual_flag, points):
         if selection_row.empty:
             return "no", "", "no"
-        limit = float(selection_row.iloc[0]['points'])
+        limit = safe_numeric(selection_row.iloc[0].get('points'))
+        if not limit:
+            return "no", "", "no"
         percentage = round((points / limit) * 100, 1)
         if qual_flag:
             status = "yes" if points >= limit else "no"
@@ -1422,8 +1434,9 @@ def bewertung_wettkampf():
             regionalteam = "no"
             if not regional_row.empty and 'points' in regional_row.columns:
                 try:
-                    ref_val = float(regional_row.iloc[0]['points'])
-                    percent = round((float(points) / ref_val) * 100, 1) if ref_val else None
+                    ref_val = safe_numeric(regional_row.iloc[0].get('points'))
+                    points_val_local = safe_numeric(points)
+                    percent = round((float(points_val_local) / float(ref_val)) * 100, 1) if ref_val and points_val_local is not None else None
                     regional_pct = percent
                 except Exception:
                     pass
@@ -1565,8 +1578,8 @@ def bewertung_wettkampf():
             regionalteam = "no"
             if not regional_row.empty and 'points' in regional_row.columns:
                 try:
-                    ref_val = float(regional_row.iloc[0]['points'])
-                    percent = round((float(points_float) / ref_val) * 100, 1) if ref_val else None
+                    ref_val = safe_numeric(regional_row.iloc[0].get('points'))
+                    percent = round((float(points_float) / float(ref_val)) * 100, 1) if ref_val else None
                     regional_pct = percent
                 except Exception:
                     pass
@@ -1684,8 +1697,9 @@ def bewertung_wettkampf():
             regionalteam = "no"
             if not regional_row.empty and 'points' in regional_row.columns:
                 try:
-                    ref_val = float(regional_row.iloc[0]['points'])
-                    percent = round((float(points) / ref_val) * 100, 1) if ref_val else None
+                    ref_val = safe_numeric(regional_row.iloc[0].get('points'))
+                    points_val_local = safe_numeric(points)
+                    percent = round((float(points_val_local) / float(ref_val)) * 100, 1) if ref_val and points_val_local is not None else None
                     regional_pct = percent
                 except:
                     pass
