@@ -24,6 +24,7 @@ import importlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+import re
 
 # 🔑 Supabase-Konfiguration
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
@@ -361,6 +362,19 @@ def _name_tokens(first_name, last_name):
     last_tok = last.split()[-1] if last else ""
     return first_tok, last_tok
 
+def _extract_year_from_text(text):
+    try:
+        s = str(text or "")
+    except Exception:
+        return None
+    m = re.search(r"(20\d{2})", s)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except Exception:
+        return None
+
 def compute_compresult_team_flags(
     *,
     competition_name,
@@ -396,6 +410,7 @@ def compute_compresult_team_flags(
 
     comp_row = {}
     piste_year = None
+    fallback_year = None
     if competitions_df is not None and not competitions_df.empty and "Name" in competitions_df.columns:
         comp_match = competitions_df[
             competitions_df["Name"].astype(str).str.strip().str.lower() == _norm_str(competition_name)
@@ -403,6 +418,11 @@ def compute_compresult_team_flags(
         if not comp_match.empty:
             comp_row = comp_match.iloc[0].to_dict()
             piste_year = comp_row.get("PisteYear")
+            if comp_row.get("Date"):
+                fallback_year = _extract_year_from_text(comp_row.get("Date"))
+
+    if fallback_year is None:
+        fallback_year = _extract_year_from_text(competition_name)
 
     sel = selectionpoints_df
     if sel is None or sel.empty:
@@ -415,13 +435,23 @@ def compute_compresult_team_flags(
         & (sel.get("category").astype(str).str.strip().str.lower() == _norm_str(category_start))
     ]
 
-    # Year filter (critical for e.g. competition date in 2025 with PisteYear=2026)
-    if piste_year not in (None, "", "nan") and "year" in relevant_selection.columns:
-        filtered_by_year = relevant_selection[
-            relevant_selection["year"].astype(str).str.strip() == str(piste_year).strip()
-        ]
-        if not filtered_by_year.empty:
+    # Year filter: prefer competitions.PisteYear; if no match, fall back to calendar year
+    # (some selectionpoints datasets are maintained by calendar year).
+    base_selection = relevant_selection
+    if "year" in relevant_selection.columns:
+        filtered_by_year = None
+        if piste_year not in (None, "", "nan"):
+            filtered_by_year = relevant_selection[
+                relevant_selection["year"].astype(str).str.strip() == str(piste_year).strip()
+            ]
+        if filtered_by_year is not None and not filtered_by_year.empty:
             relevant_selection = filtered_by_year
+        elif fallback_year is not None:
+            filtered_by_fallback = base_selection[
+                base_selection["year"].astype(str).str.strip() == str(fallback_year).strip()
+            ]
+            if not filtered_by_fallback.empty:
+                relevant_selection = filtered_by_fallback
 
     def get_status(selection_row, qual_flag, pts):
         if selection_row is None or selection_row.empty:
@@ -1343,6 +1373,16 @@ def bewertung_wettkampf():
             return pd.Series([], dtype=str)
         return df['Competition'].astype(str).str.strip().str.lower()
 
+    def _extract_comp_calendar_year(comp_row, competition_name):
+        try:
+            dt = comp_row.get("Date") if isinstance(comp_row, dict) else None
+            y = _extract_year_from_text(dt)
+            if y is not None:
+                return y
+        except Exception:
+            pass
+        return _extract_year_from_text(competition_name)
+
     # --- Nur ein PisteYear neu berechnen (z.B. 2026) ---
     # Wichtig: PisteYear kommt aus competitions.PisteYear und kann sich vom Kalenderjahr des Datums unterscheiden.
     try:
@@ -1401,16 +1441,28 @@ def bewertung_wettkampf():
             comp_row = comp_row.iloc[0] if not comp_row.empty else {}
 
             piste_year = comp_row.get("PisteYear")
+            comp_calendar_year = _extract_comp_calendar_year(comp_row, competition_name)
 
             relevant_selection = df_selection[
                 (df_selection['sex'].astype(str).str.strip().str.lower() == str(sex).strip().lower()) &
                 (df_selection['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
                 (df_selection['category'].astype(str).str.strip().str.lower() == str(category).strip().lower())
             ]
-            if piste_year not in (None, "", "nan") and "year" in relevant_selection.columns:
-                by_year = relevant_selection[relevant_selection["year"].astype(str).str.strip() == str(piste_year).strip()]
-                if not by_year.empty:
-                    relevant_selection = by_year
+            base_selection = relevant_selection
+            if "year" in relevant_selection.columns:
+                by_piste = None
+                if piste_year not in (None, "", "nan"):
+                    by_piste = relevant_selection[
+                        relevant_selection["year"].astype(str).str.strip() == str(piste_year).strip()
+                    ]
+                if by_piste is not None and not by_piste.empty:
+                    relevant_selection = by_piste
+                elif comp_calendar_year is not None:
+                    by_cal = base_selection[
+                        base_selection["year"].astype(str).str.strip() == str(comp_calendar_year).strip()
+                    ]
+                    if not by_cal.empty:
+                        relevant_selection = by_cal
 
             comp_col = _comp_label_col(relevant_selection)
             jem_row = relevant_selection[comp_col == "jem"]
@@ -1488,6 +1540,7 @@ def bewertung_wettkampf():
             comp_row = df_comp[df_comp["Name"] == competition_name]
             comp_row = comp_row.iloc[0] if not comp_row.empty else {}
             piste_year = comp_row.get("PisteYear")
+            comp_calendar_year = _extract_comp_calendar_year(comp_row, competition_name)
             if str(piste_year).strip() != str(selected_pisteyear).strip():
                 continue
 
@@ -1530,10 +1583,21 @@ def bewertung_wettkampf():
                     "CategoryStart": str(category),
                 })
 
-            if piste_year not in (None, "", "nan") and "year" in relevant_selection.columns:
-                by_year = relevant_selection[relevant_selection["year"].astype(str).str.strip() == str(piste_year).strip()]
-                if not by_year.empty:
-                    relevant_selection = by_year
+            base_selection = relevant_selection
+            if "year" in relevant_selection.columns:
+                by_piste = None
+                if piste_year not in (None, "", "nan"):
+                    by_piste = relevant_selection[
+                        relevant_selection["year"].astype(str).str.strip() == str(piste_year).strip()
+                    ]
+                if by_piste is not None and not by_piste.empty:
+                    relevant_selection = by_piste
+                elif comp_calendar_year is not None:
+                    by_cal = base_selection[
+                        base_selection["year"].astype(str).str.strip() == str(comp_calendar_year).strip()
+                    ]
+                    if not by_cal.empty:
+                        relevant_selection = by_cal
 
             comp_col = _comp_label_col(relevant_selection)
             jem_row = relevant_selection[comp_col == "jem"]
@@ -1663,16 +1727,28 @@ def bewertung_wettkampf():
             comp_row = comp_row.iloc[0] if not comp_row.empty else {}
 
             piste_year = comp_row.get("PisteYear")
+            comp_calendar_year = _extract_comp_calendar_year(comp_row, competition_name)
 
             relevant_selection = df_selection[
                 (df_selection['sex'].astype(str).str.strip().str.lower() == str(sex).strip().lower()) &
                 (df_selection['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
                 (df_selection['category'].astype(str).str.strip().str.lower() == str(category).strip().lower())
             ]
-            if piste_year not in (None, "", "nan") and "year" in relevant_selection.columns:
-                by_year = relevant_selection[relevant_selection["year"].astype(str).str.strip() == str(piste_year).strip()]
-                if not by_year.empty:
-                    relevant_selection = by_year
+            base_selection = relevant_selection
+            if "year" in relevant_selection.columns:
+                by_piste = None
+                if piste_year not in (None, "", "nan"):
+                    by_piste = relevant_selection[
+                        relevant_selection["year"].astype(str).str.strip() == str(piste_year).strip()
+                    ]
+                if by_piste is not None and not by_piste.empty:
+                    relevant_selection = by_piste
+                elif comp_calendar_year is not None:
+                    by_cal = base_selection[
+                        base_selection["year"].astype(str).str.strip() == str(comp_calendar_year).strip()
+                    ]
+                    if not by_cal.empty:
+                        relevant_selection = by_cal
 
             comp_col = _comp_label_col(relevant_selection)
             jem_row = relevant_selection[comp_col == "jem"]
@@ -1860,7 +1936,7 @@ def manage_compresults_entry():
     selected_athlete = st.selectbox("Athlet", list(athlete_names.keys()))
     athlete_data = athlete_names[selected_athlete] if selected_athlete else None
 
-    competitions = fetch_all_rows('competitions', select='Name, PisteYear, qual-Regional, qual-JEM, qual-EM, qual-WM')
+    competitions = fetch_all_rows('competitions', select='Name, Date, PisteYear, qual-Regional, qual-JEM, qual-EM, qual-WM')
     competition_names = [c['Name'] for c in competitions]
     selected_competition = st.selectbox("Wettkampf", competition_names)
 
