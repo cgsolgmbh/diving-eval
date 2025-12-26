@@ -1357,6 +1357,9 @@ def bewertung_wettkampf():
         df_comp = pd.DataFrame(competitions)
 
         updated_count = 0
+        total_in_year = 0
+        missing_selection_combos = []  # combinations where no selectionpoints exist (after base filter)
+        no_threshold_rows = 0  # rows where we have selectionpoints but none for JEM/EM/WM/Regional
         for _, row in df_results.iterrows():
             comp_id = row["id"]
             sex = row["sex"]
@@ -1370,6 +1373,8 @@ def bewertung_wettkampf():
             piste_year = comp_row.get("PisteYear")
             if str(piste_year).strip() != str(selected_pisteyear).strip():
                 continue
+
+            total_in_year += 1
 
             dives = None
             if all(col in df_agedives.columns for col in ['sex', 'category', 'Discipline', 'dives']):
@@ -1393,6 +1398,14 @@ def bewertung_wettkampf():
                 (df_selection['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
                 (df_selection['category'].astype(str).str.strip().str.lower() == str(category).strip().lower())
             ]
+
+            if relevant_selection.empty:
+                missing_selection_combos.append({
+                    "sex": str(sex),
+                    "Discipline": str(discipline),
+                    "CategoryStart": str(category),
+                })
+
             if piste_year not in (None, "", "nan") and "year" in relevant_selection.columns:
                 by_year = relevant_selection[relevant_selection["year"].astype(str).str.strip() == str(piste_year).strip()]
                 if not by_year.empty:
@@ -1402,6 +1415,9 @@ def bewertung_wettkampf():
             em_row = relevant_selection[relevant_selection['Competition'] == "EM"]
             wm_row = relevant_selection[relevant_selection['Competition'] == "WM"]
             regional_row = relevant_selection[relevant_selection['Competition'] == "Regional"]
+
+            if (not relevant_selection.empty) and jem_row.empty and em_row.empty and wm_row.empty and regional_row.empty:
+                no_threshold_rows += 1
 
             jem_qual = bool(comp_row.get("qual-JEM", False))
             em_qual = bool(comp_row.get("qual-EM", False))
@@ -1455,6 +1471,16 @@ def bewertung_wettkampf():
             updated_count += 1
 
         st.success(f"✅ {updated_count} Resultate für PisteYear {selected_pisteyear} wurden neu berechnet.")
+        st.info(
+            f"Diagnose: total in PisteYear={selected_pisteyear}: {total_in_year} | "
+            f"ohne selectionpoints-Match: {len(missing_selection_combos)} | "
+            f"selectionpoints vorhanden aber keine JEM/EM/WM/Regional-Zeile: {no_threshold_rows}"
+        )
+        if missing_selection_combos:
+            df_missing = pd.DataFrame(missing_selection_combos)
+            df_missing = df_missing.drop_duplicates().sort_values(["sex", "Discipline", "CategoryStart"])
+            st.warning("Für diese (sex/Discipline/CategoryStart) Kombinationen gibt es keine passenden selectionpoints → NationalTeam/RegionalTeam bleibt immer 'no'.")
+            st.dataframe(df_missing)
 
     if st.button("🔄 Nur neue Einträge berechnen"):
         comp_results = fetch_all_rows('compresults')
