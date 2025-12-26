@@ -362,6 +362,10 @@ def _name_tokens(first_name, last_name):
     last_tok = last.split()[-1] if last else ""
     return first_tok, last_tok
 
+# Thresholds for team flags
+NATIONAL_TEAM_MIN_PERCENT = 90
+REGIONAL_TEAM_MIN_PERCENT = 80
+
 def _extract_year_from_text(text):
     try:
         s = str(text or "")
@@ -461,7 +465,7 @@ def compute_compresult_team_flags(
             return "no", "", "no"
         percentage = round((float(pts) / float(limit)) * 100, 1)
         status = "yes" if bool(qual_flag) and float(pts) >= float(limit) else "no"
-        national = "yes" if percentage >= 90 else "no"
+        national = "yes" if percentage >= NATIONAL_TEAM_MIN_PERCENT else "no"
         return status, f"{percentage}%", national
 
     # NationalTeam is derived from the selection thresholds (JEM/EM/WM)
@@ -479,15 +483,17 @@ def compute_compresult_team_flags(
     _, _, wm_nt = get_status(wm_row, wm_qual, points_val)
     nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
 
-    # RegionalTeam is derived from the 'Regional' reference (>=70%)
+    # RegionalTeam is derived from a reference value (usually "Regional"; if not present, fall back to JEM)
     regionalteam = "no"
     regional_qual = bool(comp_row.get("qual-Regional", False))
     # Be tolerant: some datasets use different labels (e.g. "Regional-Kader", "Regional Team", etc.)
     is_regional = comp_col.isin(["regional", "regionalteam", "regional team", "regio"]) | comp_col.str.contains("reg", na=False)
     regional_row = relevant_selection[is_regional]
+    # Many datasets only contain JEM/EM/WM thresholds; use JEM as Regional fallback reference.
+    regional_ref_row = regional_row if not regional_row.empty else jem_row
     regional_pct = None
-    if not regional_row.empty and "points" in regional_row.columns:
-        ref_val = safe_float(regional_row.iloc[0].get("points"))
+    if not regional_ref_row.empty and "points" in regional_ref_row.columns:
+        ref_val = safe_float(regional_ref_row.iloc[0].get("points"))
         if ref_val:
             try:
                 regional_pct = round((float(points_val) / float(ref_val)) * 100, 1)
@@ -504,7 +510,7 @@ def compute_compresult_team_flags(
         ]
     )
 
-    if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= 70:
+    if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= REGIONAL_TEAM_MIN_PERCENT:
         regionalteam = "yes"
 
     return {"NationalTeam": nationalteam, "RegionalTeam": regionalteam}
@@ -1365,7 +1371,7 @@ def bewertung_wettkampf():
             status = "yes" if points >= limit else "no"
         else:
             status = "no"
-        national = "yes" if percentage >= 90 else "no"
+        national = "yes" if percentage >= NATIONAL_TEAM_MIN_PERCENT else "no"
         return status, f"{percentage}%", national
 
     def _comp_label_col(df: pd.DataFrame) -> pd.Series:
@@ -1484,9 +1490,10 @@ def bewertung_wettkampf():
             # RegionalTeam-Berechnung
             regional_pct = None
             regionalteam = "no"
-            if not regional_row.empty and 'points' in regional_row.columns:
+            regional_ref_row = regional_row if not regional_row.empty else jem_row
+            if not regional_ref_row.empty and 'points' in regional_ref_row.columns:
                 try:
-                    ref_val = safe_numeric(regional_row.iloc[0].get('points'))
+                    ref_val = safe_numeric(regional_ref_row.iloc[0].get('points'))
                     points_val_local = safe_numeric(points)
                     percent = round((float(points_val_local) / float(ref_val)) * 100, 1) if ref_val and points_val_local is not None else None
                     regional_pct = percent
@@ -1499,7 +1506,7 @@ def bewertung_wettkampf():
             )
 
             regional_qual = bool(comp_row.get("qual-Regional", False))
-            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= 70:
+            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= REGIONAL_TEAM_MIN_PERCENT:
                 regionalteam = "yes"
 
             update_payload = {
@@ -1640,9 +1647,10 @@ def bewertung_wettkampf():
             # RegionalTeam-Berechnung
             regional_pct = None
             regionalteam = "no"
-            if not regional_row.empty and 'points' in regional_row.columns:
+            regional_ref_row = regional_row if not regional_row.empty else jem_row
+            if not regional_ref_row.empty and 'points' in regional_ref_row.columns:
                 try:
-                    ref_val = safe_numeric(regional_row.iloc[0].get('points'))
+                    ref_val = safe_numeric(regional_ref_row.iloc[0].get('points'))
                     percent = round((float(points_float) / float(ref_val)) * 100, 1) if ref_val else None
                     regional_pct = percent
                 except Exception:
@@ -1653,7 +1661,7 @@ def bewertung_wettkampf():
                 str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
             )
 
-            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= 70:
+            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= REGIONAL_TEAM_MIN_PERCENT:
                 regionalteam = "yes"
 
             update_payload = {
@@ -1771,9 +1779,10 @@ def bewertung_wettkampf():
             # RegionalTeam-Berechnung
             regional_pct = None
             regionalteam = "no"
-            if not regional_row.empty and 'points' in regional_row.columns:
+            regional_ref_row = regional_row if not regional_row.empty else jem_row
+            if not regional_ref_row.empty and 'points' in regional_ref_row.columns:
                 try:
-                    ref_val = safe_numeric(regional_row.iloc[0].get('points'))
+                    ref_val = safe_numeric(regional_ref_row.iloc[0].get('points'))
                     points_val_local = safe_numeric(points)
                     percent = round((float(points_val_local) / float(ref_val)) * 100, 1) if ref_val and points_val_local is not None else None
                     regional_pct = percent
@@ -1785,7 +1794,7 @@ def bewertung_wettkampf():
                 str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
             )
 
-            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= 70:
+            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= REGIONAL_TEAM_MIN_PERCENT:
                 regionalteam = "yes"
 
             update_payload = {
