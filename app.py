@@ -1838,10 +1838,24 @@ def auswertung_wettkampf():
         return
     df_output = pd.DataFrame(comp_results)
 
+    # PisteYear aus competitions holen und mappen (Competition -> PisteYear)
+    competitions = fetch_all_rows('competitions', select='Name, PisteYear')
+    comp_year_map = {
+        str(c.get('Name')).strip(): c.get('PisteYear')
+        for c in competitions
+        if c.get('Name')
+    }
+    if "Competition" in df_output.columns:
+        df_output["PisteYear"] = df_output["Competition"].map(comp_year_map)
+    elif "PisteYear" not in df_output.columns:
+        df_output["PisteYear"] = None
+
     # Filter für die wichtigsten Felder
     with st.expander("🔎 Filter anzeigen"):
         first_name_filter = st.text_input("Vorname (Teilstring möglich)", "")
         last_name_filter = st.text_input("Nachname (Teilstring möglich)", "")
+        competition_filter = st.multiselect("Wettkampf (Competition)", sorted(df_output["Competition"].dropna().unique()))
+        pisteyear_filter = st.multiselect("PisteYear", sorted(df_output["PisteYear"].dropna().unique().tolist()))
         discipline_filter = st.multiselect("Disziplin", sorted(df_output["Discipline"].dropna().unique()))
         category_filter = st.multiselect("Kategorie", sorted(df_output["CategoryStart"].dropna().unique()))
         sex_filter = st.multiselect("Geschlecht", sorted(df_output["sex"].dropna().unique()))
@@ -1858,6 +1872,10 @@ def auswertung_wettkampf():
         filtered = filtered[filtered["first_name"].str.contains(first_name_filter, case=False, na=False)]
     if last_name_filter:
         filtered = filtered[filtered["last_name"].str.contains(last_name_filter, case=False, na=False)]
+    if competition_filter:
+        filtered = filtered[filtered["Competition"].isin(competition_filter)]
+    if pisteyear_filter:
+        filtered = filtered[filtered["PisteYear"].isin(pisteyear_filter)]
     if discipline_filter:
         filtered = filtered[filtered["Discipline"].isin(discipline_filter)]
     if category_filter:
