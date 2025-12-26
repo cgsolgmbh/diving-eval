@@ -364,7 +364,7 @@ def _name_tokens(first_name, last_name):
 
 # Thresholds for team flags
 NATIONAL_TEAM_MIN_PERCENT = 90
-REGIONAL_TEAM_MIN_PERCENT = 80
+REGIONAL_TEAM_MIN_PERCENT = 70
 
 def _extract_year_from_text(text):
     try:
