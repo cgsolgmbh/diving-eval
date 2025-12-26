@@ -339,6 +339,28 @@ def _norm_str(val) -> str:
         return ""
     return str(val).strip().lower()
 
+def _normalize_sex_value(val):
+    s = _norm_str(val)
+    if not s or s == "nan":
+        return None
+    mapping = {
+        "m": "male",
+        "male": "male",
+        "man": "male",
+        "w": "female",
+        "f": "female",
+        "female": "female",
+        "woman": "female",
+    }
+    return mapping.get(s, s)
+
+def _name_tokens(first_name, last_name):
+    first = _norm_str(first_name)
+    last = _norm_str(last_name)
+    first_tok = first.split()[0] if first else ""
+    last_tok = last.split()[-1] if last else ""
+    return first_tok, last_tok
+
 def compute_compresult_team_flags(
     *,
     competition_name,
@@ -1216,8 +1238,70 @@ def bewertung_wettkampf():
     selection_points = fetch_all_rows('selectionpoints')
     competitions = fetch_all_rows('competitions')
     agedives = fetch_all_rows('agedives')
+    athletes = fetch_all_rows('athletes', select='id, first_name, last_name, full_name, sex')
+    df_athletes = pd.DataFrame(athletes)
     df_agedives = pd.DataFrame(agedives)
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    athlete_sex_by_id = {}
+    athlete_sex_by_name = {}
+    athlete_sex_by_tokens = {}
+    try:
+        if not df_athletes.empty:
+            if 'id' in df_athletes.columns and 'sex' in df_athletes.columns:
+                athlete_sex_by_id = {
+                    str(r['id']): _normalize_sex_value(r.get('sex'))
+                    for _, r in df_athletes.iterrows()
+                    if r.get('id') is not None
+                }
+            if all(c in df_athletes.columns for c in ['first_name', 'last_name', 'sex']):
+                for _, r in df_athletes.iterrows():
+                    key = (_norm_str(r.get('first_name')), _norm_str(r.get('last_name')))
+                    sex_val = _normalize_sex_value(r.get('sex'))
+                    if key != ("", "") and sex_val and key not in athlete_sex_by_name:
+                        athlete_sex_by_name[key] = sex_val
+
+                    tok = _name_tokens(r.get('first_name'), r.get('last_name'))
+                    if tok != ("", "") and sex_val and tok not in athlete_sex_by_tokens:
+                        athlete_sex_by_tokens[tok] = sex_val
+
+            # Also learn from full_name if present
+            if 'full_name' in df_athletes.columns and 'sex' in df_athletes.columns:
+                for _, r in df_athletes.iterrows():
+                    full = _norm_str(r.get('full_name'))
+                    if not full:
+                        continue
+                    parts = full.split()
+                    if len(parts) < 2:
+                        continue
+                    tok = (parts[0], parts[-1])
+                    sex_val = _normalize_sex_value(r.get('sex'))
+                    if tok != ("", "") and sex_val and tok not in athlete_sex_by_tokens:
+                        athlete_sex_by_tokens[tok] = sex_val
+    except Exception:
+        athlete_sex_by_id = {}
+        athlete_sex_by_name = {}
+        athlete_sex_by_tokens = {}
+
+    def _needs_sex_update(raw_val):
+        return _norm_str(raw_val) in ("", "nan", "none")
+
+    def resolve_sex_for_compresult(result_row):
+        current = _normalize_sex_value(result_row.get('sex'))
+        if current:
+            return current
+        athlete_id = result_row.get('athlete_id')
+        if athlete_id not in (None, "", "nan"):
+            lookup = athlete_sex_by_id.get(str(athlete_id))
+            if lookup:
+                return lookup
+        first = _norm_str(result_row.get('first_name'))
+        last = _norm_str(result_row.get('last_name'))
+        lookup = athlete_sex_by_name.get((first, last))
+        if lookup:
+            return lookup
+        tok_lookup = athlete_sex_by_tokens.get(_name_tokens(first, last))
+        return tok_lookup
 
     def safe_numeric(val):
         if val in ("", None):
@@ -1258,7 +1342,14 @@ def bewertung_wettkampf():
 
         for _, row in df_results.iterrows():
             comp_id = row["id"]
-            sex = row["sex"]
+            sex = resolve_sex_for_compresult(row)
+            # If sex was missing, persist it immediately
+            if sex and _needs_sex_update(row.get('sex')):
+                try:
+                    supabase.table('compresults').update({"sex": sex}).eq("id", comp_id).execute()
+                except Exception:
+                    pass
+
             discipline = row["Discipline"]
             category = row["CategoryStart"]
             points = row["Points"]
@@ -1336,7 +1427,7 @@ def bewertung_wettkampf():
             if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= 70:
                 regionalteam = "yes"
 
-            supabase.table('compresults').update({
+            update_payload = {
                 "JEM": jem,
                 "JEM%": safe_numeric(jem_pct),
                 "EM": em,
@@ -1347,7 +1438,8 @@ def bewertung_wettkampf():
                 "RegionalTeam": regionalteam,
                 "AveragePoints": average_points,
                 "timestamp": now_str
-            }).eq("id", comp_id).execute()
+            }
+            supabase.table('compresults').update(update_payload).eq("id", comp_id).execute()
         st.success("Alle Wettkampfbewertungen wurden neu berechnet!")
 
     if selected_pisteyear and st.button(f"🔄 Nur PisteYear {selected_pisteyear} neu berechnen"):
@@ -1362,7 +1454,7 @@ def bewertung_wettkampf():
         no_threshold_rows = 0  # rows where we have selectionpoints but none for JEM/EM/WM/Regional
         for _, row in df_results.iterrows():
             comp_id = row["id"]
-            sex = row["sex"]
+            sex = resolve_sex_for_compresult(row)
             discipline = row["Discipline"]
             category = row["CategoryStart"]
             points = row["Points"]
@@ -1375,6 +1467,13 @@ def bewertung_wettkampf():
                 continue
 
             total_in_year += 1
+
+            # If sex was missing, persist it immediately (needed for selectionpoints matching)
+            if sex and _needs_sex_update(row.get('sex')):
+                try:
+                    supabase.table('compresults').update({"sex": sex}).eq("id", comp_id).execute()
+                except Exception:
+                    pass
 
             dives = None
             if all(col in df_agedives.columns for col in ['sex', 'category', 'Discipline', 'dives']):
@@ -1456,7 +1555,7 @@ def bewertung_wettkampf():
             if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= 70:
                 regionalteam = "yes"
 
-            supabase.table('compresults').update({
+            update_payload = {
                 "JEM": jem,
                 "JEM%": safe_numeric(jem_pct),
                 "EM": em,
@@ -1467,7 +1566,8 @@ def bewertung_wettkampf():
                 "RegionalTeam": regionalteam,
                 "AveragePoints": average_points,
                 "timestamp": now_str
-            }).eq("id", comp_id).execute()
+            }
+            supabase.table('compresults').update(update_payload).eq("id", comp_id).execute()
             updated_count += 1
 
         st.success(f"✅ {updated_count} Resultate für PisteYear {selected_pisteyear} wurden neu berechnet.")
@@ -1490,7 +1590,13 @@ def bewertung_wettkampf():
 
         for _, row in df_results.iterrows():
             comp_id = row["id"]
-            sex = row["sex"]
+            sex = resolve_sex_for_compresult(row)
+            if sex and _needs_sex_update(row.get('sex')):
+                try:
+                    supabase.table('compresults').update({"sex": sex}).eq("id", comp_id).execute()
+                except Exception:
+                    pass
+
             discipline = row["Discipline"]
             category = row["CategoryStart"]
             points = row["Points"]
@@ -1563,7 +1669,7 @@ def bewertung_wettkampf():
             if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= 70:
                 regionalteam = "yes"
 
-            supabase.table('compresults').update({
+            update_payload = {
                 "JEM": jem,
                 "JEM%": safe_numeric(jem_pct),
                 "EM": em,
@@ -1574,7 +1680,8 @@ def bewertung_wettkampf():
                 "RegionalTeam": regionalteam,
                 "AveragePoints": average_points,
                 "timestamp": now_str
-            }).eq("id", comp_id).execute()
+            }
+            supabase.table('compresults').update(update_payload).eq("id", comp_id).execute()
         st.success("Neue Einträge wurden berechnet!")
 
     # TESTTOOL: Timestamps zurücksetzen
