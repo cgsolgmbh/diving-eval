@@ -334,6 +334,121 @@ def get_birth_quarter(birthdate):
         return None
     return None
 
+def _norm_str(val) -> str:
+    if val is None:
+        return ""
+    return str(val).strip().lower()
+
+def compute_compresult_team_flags(
+    *,
+    competition_name,
+    sex,
+    discipline,
+    category_start,
+    points,
+    competitions_df: pd.DataFrame,
+    selectionpoints_df: pd.DataFrame,
+):
+    """Compute NationalTeam/RegionalTeam for a compresult.
+
+    IMPORTANT: selection thresholds are year-dependent; we use competitions.PisteYear
+    (not the calendar year of the competition date).
+    """
+
+    def safe_float(x):
+        try:
+            if x in (None, "", "nan"):
+                return None
+            return float(x)
+        except Exception:
+            return None
+
+    points_val = safe_float(points)
+    if points_val is None:
+        return {"NationalTeam": "no", "RegionalTeam": "no"}
+
+    comp_row = {}
+    piste_year = None
+    if competitions_df is not None and not competitions_df.empty and "Name" in competitions_df.columns:
+        comp_match = competitions_df[
+            competitions_df["Name"].astype(str).str.strip().str.lower() == _norm_str(competition_name)
+        ]
+        if not comp_match.empty:
+            comp_row = comp_match.iloc[0].to_dict()
+            piste_year = comp_row.get("PisteYear")
+
+    sel = selectionpoints_df
+    if sel is None or sel.empty:
+        return {"NationalTeam": "no", "RegionalTeam": "no"}
+
+    # Base filter (sex/discipline/category)
+    relevant_selection = sel[
+        (sel.get("sex").astype(str).str.strip().str.lower() == _norm_str(sex))
+        & (sel.get("Discipline").astype(str).str.strip().str.lower() == _norm_str(discipline))
+        & (sel.get("category").astype(str).str.strip().str.lower() == _norm_str(category_start))
+    ]
+
+    # Year filter (critical for e.g. competition date in 2025 with PisteYear=2026)
+    if piste_year not in (None, "", "nan") and "year" in relevant_selection.columns:
+        filtered_by_year = relevant_selection[
+            relevant_selection["year"].astype(str).str.strip() == str(piste_year).strip()
+        ]
+        if not filtered_by_year.empty:
+            relevant_selection = filtered_by_year
+
+    def get_status(selection_row, qual_flag, pts):
+        if selection_row is None or selection_row.empty:
+            return "no", "", "no"
+        limit = safe_float(selection_row.iloc[0].get("points"))
+        if not limit:
+            return "no", "", "no"
+        percentage = round((float(pts) / float(limit)) * 100, 1)
+        status = "yes" if bool(qual_flag) and float(pts) >= float(limit) else "no"
+        national = "yes" if percentage >= 90 else "no"
+        return status, f"{percentage}%", national
+
+    # NationalTeam is derived from the selection thresholds (JEM/EM/WM)
+    jem_row = relevant_selection[relevant_selection.get("Competition").astype(str) == "JEM"]
+    em_row = relevant_selection[relevant_selection.get("Competition").astype(str) == "EM"]
+    wm_row = relevant_selection[relevant_selection.get("Competition").astype(str) == "WM"]
+
+    jem_qual = bool(comp_row.get("qual-JEM", False))
+    em_qual = bool(comp_row.get("qual-EM", False))
+    wm_qual = bool(comp_row.get("qual-WM", False))
+
+    _, _, jem_nt = get_status(jem_row, jem_qual, points_val)
+    _, _, em_nt = get_status(em_row, em_qual, points_val)
+    _, _, wm_nt = get_status(wm_row, wm_qual, points_val)
+    nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
+
+    # RegionalTeam is derived from the 'Regional' reference (>=70%)
+    regionalteam = "no"
+    regional_qual = bool(comp_row.get("qual-Regional", False))
+    regional_row = relevant_selection[relevant_selection.get("Competition").astype(str) == "Regional"]
+    regional_pct = None
+    if not regional_row.empty and "points" in regional_row.columns:
+        ref_val = safe_float(regional_row.iloc[0].get("points"))
+        if ref_val:
+            try:
+                regional_pct = round((float(points_val) / float(ref_val)) * 100, 1)
+            except Exception:
+                regional_pct = None
+
+    excluded_synchro = (
+        _norm_str(category_start) in ["jugend c", "jugend d"]
+        and _norm_str(discipline) in [
+            "1m synchro",
+            "3m synchro",
+            "platform synchro",
+            "turm synchro",
+        ]
+    )
+
+    if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= 70:
+        regionalteam = "yes"
+
+    return {"NationalTeam": nationalteam, "RegionalTeam": regionalteam}
+
 # Punkteberechnung
 def get_points(discipline_id, result, category, sex):
     try:
@@ -1124,6 +1239,17 @@ def bewertung_wettkampf():
         national = "yes" if percentage >= 90 else "no"
         return status, f"{percentage}%", national
 
+    # --- Nur ein PisteYear neu berechnen (z.B. 2026) ---
+    # Wichtig: PisteYear kommt aus competitions.PisteYear und kann sich vom Kalenderjahr des Datums unterscheiden.
+    try:
+        pisteyears = sorted({str(c.get("PisteYear")) for c in competitions if c.get("PisteYear")}, reverse=True)
+    except Exception:
+        pisteyears = []
+    if pisteyears:
+        selected_pisteyear = st.selectbox("PisteYear gezielt neu berechnen", pisteyears, index=0)
+    else:
+        selected_pisteyear = None
+
     if st.button("🔄 Alle Wettkampfbewertungen berechnen"):
         comp_results = fetch_all_rows('compresults')
         df_results = pd.DataFrame(comp_results)
@@ -1163,15 +1289,22 @@ def bewertung_wettkampf():
             comp_row = df_comp[df_comp["Name"] == competition_name]
             comp_row = comp_row.iloc[0] if not comp_row.empty else {}
 
+            piste_year = comp_row.get("PisteYear")
+
             relevant_selection = df_selection[
-                (df_selection['sex'] == sex) &
-                (df_selection['Discipline'] == discipline) &
-                (df_selection['category'] == category)
+                (df_selection['sex'].astype(str).str.strip().str.lower() == str(sex).strip().lower()) &
+                (df_selection['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
+                (df_selection['category'].astype(str).str.strip().str.lower() == str(category).strip().lower())
             ]
+            if piste_year not in (None, "", "nan") and "year" in relevant_selection.columns:
+                by_year = relevant_selection[relevant_selection["year"].astype(str).str.strip() == str(piste_year).strip()]
+                if not by_year.empty:
+                    relevant_selection = by_year
 
             jem_row = relevant_selection[relevant_selection['Competition'] == "JEM"]
             em_row = relevant_selection[relevant_selection['Competition'] == "EM"]
             wm_row = relevant_selection[relevant_selection['Competition'] == "WM"]
+            regional_row = relevant_selection[relevant_selection['Competition'] == "Regional"]
 
             jem_qual = bool(comp_row.get("qual-JEM", False))
             em_qual = bool(comp_row.get("qual-EM", False))
@@ -1183,6 +1316,26 @@ def bewertung_wettkampf():
 
             nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
 
+            # RegionalTeam-Berechnung
+            regional_pct = None
+            regionalteam = "no"
+            if not regional_row.empty and 'points' in regional_row.columns:
+                try:
+                    ref_val = float(regional_row.iloc[0]['points'])
+                    percent = round((float(points) / ref_val) * 100, 1) if ref_val else None
+                    regional_pct = percent
+                except Exception:
+                    pass
+
+            excluded_synchro = (
+                str(category).strip().lower() in ["jugend c", "jugend d"] and
+                str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
+            )
+
+            regional_qual = bool(comp_row.get("qual-Regional", False))
+            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= 70:
+                regionalteam = "yes"
+
             supabase.table('compresults').update({
                 "JEM": jem,
                 "JEM%": safe_numeric(jem_pct),
@@ -1190,11 +1343,118 @@ def bewertung_wettkampf():
                 "EM%": safe_numeric(em_pct),
                 "WM": wm,
                 "WM%": safe_numeric(wm_pct),
-                # "NationalTeam": nationalteam,
+                "NationalTeam": nationalteam,
+                "RegionalTeam": regionalteam,
                 "AveragePoints": average_points,
                 "timestamp": now_str
             }).eq("id", comp_id).execute()
         st.success("Alle Wettkampfbewertungen wurden neu berechnet!")
+
+    if selected_pisteyear and st.button(f"🔄 Nur PisteYear {selected_pisteyear} neu berechnen"):
+        comp_results = fetch_all_rows('compresults')
+        df_results = pd.DataFrame(comp_results)
+        df_selection = pd.DataFrame(selection_points)
+        df_comp = pd.DataFrame(competitions)
+
+        updated_count = 0
+        for _, row in df_results.iterrows():
+            comp_id = row["id"]
+            sex = row["sex"]
+            discipline = row["Discipline"]
+            category = row["CategoryStart"]
+            points = row["Points"]
+            competition_name = row["Competition"]
+
+            comp_row = df_comp[df_comp["Name"] == competition_name]
+            comp_row = comp_row.iloc[0] if not comp_row.empty else {}
+            piste_year = comp_row.get("PisteYear")
+            if str(piste_year).strip() != str(selected_pisteyear).strip():
+                continue
+
+            dives = None
+            if all(col in df_agedives.columns for col in ['sex', 'category', 'Discipline', 'dives']):
+                dives_row = df_agedives[
+                    (df_agedives['sex'].astype(str).str.strip().str.lower() == str(sex).strip().lower()) &
+                    (df_agedives['category'].astype(str).str.strip().str.lower() == str(category).strip().lower()) &
+                    (df_agedives['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower())
+                ]
+                dives = dives_row.iloc[0]['dives'] if not dives_row.empty else None
+
+            average_points = None
+            try:
+                points_val = float(points)
+                dives_val = float(dives)
+                average_points = points_val / dives_val if dives_val else None
+            except Exception:
+                average_points = None
+
+            relevant_selection = df_selection[
+                (df_selection['sex'].astype(str).str.strip().str.lower() == str(sex).strip().lower()) &
+                (df_selection['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
+                (df_selection['category'].astype(str).str.strip().str.lower() == str(category).strip().lower())
+            ]
+            if piste_year not in (None, "", "nan") and "year" in relevant_selection.columns:
+                by_year = relevant_selection[relevant_selection["year"].astype(str).str.strip() == str(piste_year).strip()]
+                if not by_year.empty:
+                    relevant_selection = by_year
+
+            jem_row = relevant_selection[relevant_selection['Competition'] == "JEM"]
+            em_row = relevant_selection[relevant_selection['Competition'] == "EM"]
+            wm_row = relevant_selection[relevant_selection['Competition'] == "WM"]
+            regional_row = relevant_selection[relevant_selection['Competition'] == "Regional"]
+
+            jem_qual = bool(comp_row.get("qual-JEM", False))
+            em_qual = bool(comp_row.get("qual-EM", False))
+            wm_qual = bool(comp_row.get("qual-WM", False))
+            regional_qual = bool(comp_row.get("qual-Regional", False))
+
+            try:
+                points_float = float(points)
+            except Exception:
+                points_float = None
+
+            if points_float is None:
+                continue
+
+            jem, jem_pct, jem_nt = get_status(jem_row, jem_qual, points_float)
+            em, em_pct, em_nt = get_status(em_row, em_qual, points_float)
+            wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points_float)
+            nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
+
+            # RegionalTeam-Berechnung
+            regional_pct = None
+            regionalteam = "no"
+            if not regional_row.empty and 'points' in regional_row.columns:
+                try:
+                    ref_val = float(regional_row.iloc[0]['points'])
+                    percent = round((float(points_float) / ref_val) * 100, 1) if ref_val else None
+                    regional_pct = percent
+                except Exception:
+                    pass
+
+            excluded_synchro = (
+                str(category).strip().lower() in ["jugend c", "jugend d"] and
+                str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
+            )
+
+            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= 70:
+                regionalteam = "yes"
+
+            supabase.table('compresults').update({
+                "JEM": jem,
+                "JEM%": safe_numeric(jem_pct),
+                "EM": em,
+                "EM%": safe_numeric(em_pct),
+                "WM": wm,
+                "WM%": safe_numeric(wm_pct),
+                "NationalTeam": nationalteam,
+                "RegionalTeam": regionalteam,
+                "AveragePoints": average_points,
+                "timestamp": now_str
+            }).eq("id", comp_id).execute()
+            updated_count += 1
+
+        st.success(f"✅ {updated_count} Resultate für PisteYear {selected_pisteyear} wurden neu berechnet.")
 
     if st.button("🔄 Nur neue Einträge berechnen"):
         comp_results = fetch_all_rows('compresults')
@@ -1230,11 +1490,17 @@ def bewertung_wettkampf():
             comp_row = df_comp[df_comp["Name"] == competition_name]
             comp_row = comp_row.iloc[0] if not comp_row.empty else {}
 
+            piste_year = comp_row.get("PisteYear")
+
             relevant_selection = df_selection[
-                (df_selection['sex'] == sex) &
-                (df_selection['Discipline'] == discipline) &
-                (df_selection['category'] == category)
+                (df_selection['sex'].astype(str).str.strip().str.lower() == str(sex).strip().lower()) &
+                (df_selection['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
+                (df_selection['category'].astype(str).str.strip().str.lower() == str(category).strip().lower())
             ]
+            if piste_year not in (None, "", "nan") and "year" in relevant_selection.columns:
+                by_year = relevant_selection[relevant_selection["year"].astype(str).str.strip() == str(piste_year).strip()]
+                if not by_year.empty:
+                    relevant_selection = by_year
 
             jem_row = relevant_selection[relevant_selection['Competition'] == "JEM"]
             em_row = relevant_selection[relevant_selection['Competition'] == "EM"]
@@ -1255,9 +1521,9 @@ def bewertung_wettkampf():
             # RegionalTeam-Berechnung
             regional_pct = None
             regionalteam = "no"
-            if not regional_row.empty and 'value' in regional_row.columns:
+            if not regional_row.empty and 'points' in regional_row.columns:
                 try:
-                    ref_val = float(regional_row.iloc[0]['value'])
+                    ref_val = float(regional_row.iloc[0]['points'])
                     percent = round((float(points) / ref_val) * 100, 1) if ref_val else None
                     regional_pct = percent
                 except:
@@ -1418,9 +1684,13 @@ def manage_compresults_entry():
     selected_athlete = st.selectbox("Athlet", list(athlete_names.keys()))
     athlete_data = athlete_names[selected_athlete] if selected_athlete else None
 
-    competitions = fetch_all_rows('competitions', select='Name')
+    competitions = fetch_all_rows('competitions', select='Name, PisteYear, qual-Regional, qual-JEM, qual-EM, qual-WM')
     competition_names = [c['Name'] for c in competitions]
     selected_competition = st.selectbox("Wettkampf", competition_names)
+
+    selectionpoints = fetch_all_rows('selectionpoints')
+    selectionpoints_df = pd.DataFrame(selectionpoints)
+    competitions_df = pd.DataFrame(competitions)
 
     discipline = st.selectbox("Disziplin", ["1m", "3m", "platform", "3m synchro", "platform synchro"])
     category_start = st.selectbox("Kategorie", ["Jugend A", "Jugend B", "Jugend C", "Jugend D", "Elite"])
@@ -1430,6 +1700,15 @@ def manage_compresults_entry():
 
     if st.button("💾 Ergebnis speichern"):
         if athlete_data:
+            team_flags = compute_compresult_team_flags(
+                competition_name=selected_competition,
+                sex=athlete_data['sex'],
+                discipline=discipline,
+                category_start=category_start,
+                points=points,
+                competitions_df=competitions_df,
+                selectionpoints_df=selectionpoints_df,
+            )
             supabase.table('compresults').insert({
                 "first_name": athlete_data['first_name'],
                 "last_name": athlete_data['last_name'],
@@ -1439,7 +1718,8 @@ def manage_compresults_entry():
                 "CategoryStart": category_start,
                 "PreFin": prefin,
                 "Points": points,
-                "Difficulty": difficulty
+                "Difficulty": difficulty,
+                **team_flags,
             }).execute()
             st.success("Wettkampfresultat gespeichert!")
 
@@ -1478,6 +1758,15 @@ def manage_compresults_entry():
                 skipped.append({"first_name": first, "last_name": last})
                 continue
             try:
+                team_flags = compute_compresult_team_flags(
+                    competition_name=row["Competition"],
+                    sex=athlete["sex"],
+                    discipline=row["Discipline"],
+                    category_start=row["CategoryStart"],
+                    points=row["Points"],
+                    competitions_df=competitions_df,
+                    selectionpoints_df=selectionpoints_df,
+                )
                 supabase.table('compresults').insert({
                     "first_name": first,
                     "last_name": last,
@@ -1487,7 +1776,8 @@ def manage_compresults_entry():
                     "CategoryStart": row["CategoryStart"],
                     "PreFin": row["PreFin"],
                     "Points": row["Points"],
-                    "Difficulty": row["Difficulty"]
+                    "Difficulty": row["Difficulty"],
+                    **team_flags,
                 }).execute()
                 inserted += 1
             except Exception as e:
