@@ -2066,6 +2066,168 @@ def manage_compresults_entry():
             st.warning("Folgende Athleten wurden nicht gefunden:")
             st.dataframe(pd.DataFrame(skipped))
 
+    st.markdown("---")
+    st.subheader("Import DiveLive")
+
+    # Beispiel-Datei (DiveLive)
+    sample_divelive = pd.DataFrame(
+        {
+            "Category": ["Jugend B"],
+            "gender": ["female"],
+            "event_height": ["3"],
+            "total_award": ["350.50"],
+            "firstname": ["Max"],
+            "lastname": ["Mustermann"],
+        }
+    )
+    st.download_button(
+        "📄 Beispiel DiveLive CSV herunterladen",
+        data=sample_divelive.to_csv(index=False).encode("utf-8-sig"),
+        file_name="divelive_beispiel.csv",
+        mime="text/csv",
+        key="divelive_sample_download",
+    )
+
+    if not competition_names:
+        st.warning("Keine Wettkämpfe in der Tabelle competitions vorhanden. Bitte zuerst einen Wettkampf anlegen.")
+        return
+
+    selected_competition_divelive = st.selectbox(
+        "Wettkampf für DiveLive Import",
+        competition_names,
+        index=competition_names.index(selected_competition) if selected_competition in competition_names else 0,
+        key="divelive_selected_competition",
+    )
+
+    divelive_file = st.file_uploader(
+        "DiveLive CSV-Datei hochladen",
+        type=["csv"],
+        key="divelive_compresults_uploader",
+    )
+
+    def _normalize_divelive_discipline(value: str) -> str:
+        s = str(value or "").strip().lower()
+        if s == "":
+            return ""
+        if "platform" in s or "tower" in s or "turm" in s:
+            return "platform"
+        if s.startswith("1"):
+            return "1m"
+        if s.startswith("3"):
+            return "3m"
+        return str(value).strip()
+
+    def _safe_float_import(x):
+        try:
+            if x in (None, "", "nan"):
+                return None
+            if isinstance(x, str):
+                s = x.strip().replace("%", "").replace(",", ".")
+                if s == "":
+                    return None
+                return float(s)
+            return float(x)
+        except Exception:
+            return None
+
+    if divelive_file is not None:
+        if st.button("Import DiveLive", key="import_divelive_btn"):
+            try:
+                try:
+                    divelive_file.seek(0)
+                except Exception:
+                    pass
+
+                try:
+                    df_dl = pd.read_csv(divelive_file, sep=None, engine="python", encoding="utf-8-sig")
+                except TypeError:
+                    df_dl = pd.read_csv(divelive_file, sep=None, engine="python")
+
+                cols_by_lower = {str(c).strip().lower(): c for c in df_dl.columns}
+                required_src = ["category", "gender", "event_height", "total_award", "firstname", "lastname"]
+                missing = [c for c in required_src if c not in cols_by_lower]
+                if missing:
+                    st.error(f"❌ DiveLive CSV muss folgende Spalten enthalten: {', '.join(required_src)}")
+                    st.info(f"Fehlend: {', '.join(missing)}")
+                    return
+
+                # lookup for optional sex fallback
+                athlete_lookup = {
+                    (str(a.get("first_name", "")).strip().lower(), str(a.get("last_name", "")).strip().lower()): a
+                    for a in athletes
+                }
+
+                inserted_dl = 0
+                skipped_dl = []
+
+                for _, row in df_dl.iterrows():
+                    try:
+                        first = str(row[cols_by_lower["firstname"]]).strip()
+                        last = str(row[cols_by_lower["lastname"]]).strip()
+                        if first.lower() in ("", "nan") or last.lower() in ("", "nan"):
+                            skipped_dl.append({"first_name": first, "last_name": last, "reason": "Vor-/Nachname fehlt"})
+                            continue
+
+                        category = str(row[cols_by_lower["category"]]).strip()
+                        if category.lower() in ("", "nan"):
+                            skipped_dl.append({"first_name": first, "last_name": last, "reason": "Category fehlt"})
+                            continue
+
+                        discipline_val = _normalize_divelive_discipline(row[cols_by_lower["event_height"]])
+                        if str(discipline_val).strip() == "":
+                            skipped_dl.append({"first_name": first, "last_name": last, "reason": "event_height/Discipline fehlt"})
+                            continue
+
+                        points_val = _safe_float_import(row[cols_by_lower["total_award"]])
+                        if points_val is None:
+                            skipped_dl.append({"first_name": first, "last_name": last, "reason": "total_award/Points leer/ungültig"})
+                            continue
+
+                        sex_val = _normalize_sex_value(row[cols_by_lower["gender"]])
+                        if not sex_val:
+                            athlete = athlete_lookup.get((first.lower(), last.lower()))
+                            if athlete:
+                                sex_val = _normalize_sex_value(athlete.get("sex"))
+
+                        # Team-Flags berechnen (falls möglich) – Import soll nie komplett abstürzen
+                        team_flags = {"NationalTeam": "no", "RegionalTeam": "no"}
+                        try:
+                            if sex_val:
+                                team_flags = compute_compresult_team_flags(
+                                    competition_name=selected_competition_divelive,
+                                    sex=sex_val,
+                                    discipline=discipline_val,
+                                    category_start=category,
+                                    points=points_val,
+                                    competitions_df=competitions_df,
+                                    selectionpoints_df=selectionpoints_df,
+                                )
+                        except Exception as e:
+                            skipped_dl.append({"first_name": first, "last_name": last, "reason": f"Team-Flags Fehler: {e}"})
+
+                        supabase.table('compresults').insert({
+                            "first_name": first,
+                            "last_name": last,
+                            "sex": sex_val,
+                            "Competition": selected_competition_divelive,
+                            "Discipline": discipline_val,
+                            "CategoryStart": category,
+                            "PreFin": "FinalOnly",
+                            "Points": points_val,
+                            "Difficulty": 0.0,
+                            **team_flags,
+                        }).execute()
+                        inserted_dl += 1
+                    except Exception as e:
+                        skipped_dl.append({"first_name": first if 'first' in locals() else "", "last_name": last if 'last' in locals() else "", "reason": f"Import Fehler: {e}"})
+
+                st.success(f"✅ {inserted_dl} DiveLive Resultate importiert (Wettkampf: {selected_competition_divelive}).")
+                if skipped_dl:
+                    st.warning("Einige Zeilen wurden übersprungen:")
+                    st.dataframe(pd.DataFrame(skipped_dl))
+            except Exception as e:
+                st.error(f"❌ Import fehlgeschlagen: {e}")
+
 def safe_numeric(val):
     if val in ("", None):
         return None
