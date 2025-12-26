@@ -430,9 +430,10 @@ def compute_compresult_team_flags(
         return status, f"{percentage}%", national
 
     # NationalTeam is derived from the selection thresholds (JEM/EM/WM)
-    jem_row = relevant_selection[relevant_selection.get("Competition").astype(str) == "JEM"]
-    em_row = relevant_selection[relevant_selection.get("Competition").astype(str) == "EM"]
-    wm_row = relevant_selection[relevant_selection.get("Competition").astype(str) == "WM"]
+    comp_col = relevant_selection.get("Competition").astype(str).str.strip().str.lower()
+    jem_row = relevant_selection[comp_col == "jem"]
+    em_row = relevant_selection[comp_col == "em"]
+    wm_row = relevant_selection[comp_col == "wm"]
 
     jem_qual = bool(comp_row.get("qual-JEM", False))
     em_qual = bool(comp_row.get("qual-EM", False))
@@ -446,7 +447,9 @@ def compute_compresult_team_flags(
     # RegionalTeam is derived from the 'Regional' reference (>=70%)
     regionalteam = "no"
     regional_qual = bool(comp_row.get("qual-Regional", False))
-    regional_row = relevant_selection[relevant_selection.get("Competition").astype(str) == "Regional"]
+    regional_row = relevant_selection[
+        comp_col.isin(["regional", "regionalteam", "regional team", "regio"])
+    ]
     regional_pct = None
     if not regional_row.empty and "points" in regional_row.columns:
         ref_val = safe_float(regional_row.iloc[0].get("points"))
@@ -1323,6 +1326,11 @@ def bewertung_wettkampf():
         national = "yes" if percentage >= 90 else "no"
         return status, f"{percentage}%", national
 
+    def _comp_label_col(df: pd.DataFrame) -> pd.Series:
+        if df is None or df.empty or 'Competition' not in df.columns:
+            return pd.Series([], dtype=str)
+        return df['Competition'].astype(str).str.strip().str.lower()
+
     # --- Nur ein PisteYear neu berechnen (z.B. 2026) ---
     # Wichtig: PisteYear kommt aus competitions.PisteYear und kann sich vom Kalenderjahr des Datums unterscheiden.
     try:
@@ -1392,10 +1400,11 @@ def bewertung_wettkampf():
                 if not by_year.empty:
                     relevant_selection = by_year
 
-            jem_row = relevant_selection[relevant_selection['Competition'] == "JEM"]
-            em_row = relevant_selection[relevant_selection['Competition'] == "EM"]
-            wm_row = relevant_selection[relevant_selection['Competition'] == "WM"]
-            regional_row = relevant_selection[relevant_selection['Competition'] == "Regional"]
+            comp_col = _comp_label_col(relevant_selection)
+            jem_row = relevant_selection[comp_col == "jem"]
+            em_row = relevant_selection[comp_col == "em"]
+            wm_row = relevant_selection[comp_col == "wm"]
+            regional_row = relevant_selection[comp_col.isin(["regional", "regionalteam", "regional team", "regio"])]
 
             jem_qual = bool(comp_row.get("qual-JEM", False))
             em_qual = bool(comp_row.get("qual-EM", False))
@@ -1510,10 +1519,11 @@ def bewertung_wettkampf():
                 if not by_year.empty:
                     relevant_selection = by_year
 
-            jem_row = relevant_selection[relevant_selection['Competition'] == "JEM"]
-            em_row = relevant_selection[relevant_selection['Competition'] == "EM"]
-            wm_row = relevant_selection[relevant_selection['Competition'] == "WM"]
-            regional_row = relevant_selection[relevant_selection['Competition'] == "Regional"]
+            comp_col = _comp_label_col(relevant_selection)
+            jem_row = relevant_selection[comp_col == "jem"]
+            em_row = relevant_selection[comp_col == "em"]
+            wm_row = relevant_selection[comp_col == "wm"]
+            regional_row = relevant_selection[comp_col.isin(["regional", "regionalteam", "regional team", "regio"])]
 
             if (not relevant_selection.empty) and jem_row.empty and em_row.empty and wm_row.empty and regional_row.empty:
                 no_threshold_rows += 1
@@ -1634,10 +1644,11 @@ def bewertung_wettkampf():
                 if not by_year.empty:
                     relevant_selection = by_year
 
-            jem_row = relevant_selection[relevant_selection['Competition'] == "JEM"]
-            em_row = relevant_selection[relevant_selection['Competition'] == "EM"]
-            wm_row = relevant_selection[relevant_selection['Competition'] == "WM"]
-            regional_row = relevant_selection[relevant_selection['Competition'] == "Regional"]
+            comp_col = _comp_label_col(relevant_selection)
+            jem_row = relevant_selection[comp_col == "jem"]
+            em_row = relevant_selection[comp_col == "em"]
+            wm_row = relevant_selection[comp_col == "wm"]
+            regional_row = relevant_selection[comp_col.isin(["regional", "regionalteam", "regional team", "regio"])]
 
             jem_qual = bool(comp_row.get("qual-JEM", False))
             em_qual = bool(comp_row.get("qual-EM", False))
