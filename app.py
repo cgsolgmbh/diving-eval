@@ -447,9 +447,9 @@ def compute_compresult_team_flags(
     # RegionalTeam is derived from the 'Regional' reference (>=70%)
     regionalteam = "no"
     regional_qual = bool(comp_row.get("qual-Regional", False))
-    regional_row = relevant_selection[
-        comp_col.isin(["regional", "regionalteam", "regional team", "regio"])
-    ]
+    # Be tolerant: some datasets use different labels (e.g. "Regional-Kader", "Regional Team", etc.)
+    is_regional = comp_col.isin(["regional", "regionalteam", "regional team", "regio"]) | comp_col.str.contains("reg", na=False)
+    regional_row = relevant_selection[is_regional]
     regional_pct = None
     if not regional_row.empty and "points" in regional_row.columns:
         ref_val = safe_float(regional_row.iloc[0].get("points"))
@@ -1404,7 +1404,8 @@ def bewertung_wettkampf():
             jem_row = relevant_selection[comp_col == "jem"]
             em_row = relevant_selection[comp_col == "em"]
             wm_row = relevant_selection[comp_col == "wm"]
-            regional_row = relevant_selection[comp_col.isin(["regional", "regionalteam", "regional team", "regio"])]
+            is_regional = comp_col.isin(["regional", "regionalteam", "regional team", "regio"]) | comp_col.str.contains("reg", na=False)
+            regional_row = relevant_selection[is_regional]
 
             jem_qual = bool(comp_row.get("qual-JEM", False))
             em_qual = bool(comp_row.get("qual-EM", False))
@@ -1461,6 +1462,8 @@ def bewertung_wettkampf():
         total_in_year = 0
         missing_selection_combos = []  # combinations where no selectionpoints exist (after base filter)
         no_threshold_rows = 0  # rows where we have selectionpoints but none for JEM/EM/WM/Regional
+        no_regional_ref_rows = 0
+        seen_regional_labels = set()
         for _, row in df_results.iterrows():
             comp_id = row["id"]
             sex = resolve_sex_for_compresult(row)
@@ -1523,7 +1526,18 @@ def bewertung_wettkampf():
             jem_row = relevant_selection[comp_col == "jem"]
             em_row = relevant_selection[comp_col == "em"]
             wm_row = relevant_selection[comp_col == "wm"]
-            regional_row = relevant_selection[comp_col.isin(["regional", "regionalteam", "regional team", "regio"])]
+            is_regional = comp_col.isin(["regional", "regionalteam", "regional team", "regio"]) | comp_col.str.contains("reg", na=False)
+            regional_row = relevant_selection[is_regional]
+
+            if not relevant_selection.empty:
+                for lbl in comp_col[is_regional].dropna().unique().tolist():
+                    seen_regional_labels.add(str(lbl))
+
+            if relevant_selection.empty:
+                # already counted by missing_selection_combos
+                pass
+            elif regional_row.empty:
+                no_regional_ref_rows += 1
 
             if (not relevant_selection.empty) and jem_row.empty and em_row.empty and wm_row.empty and regional_row.empty:
                 no_threshold_rows += 1
@@ -1584,8 +1598,11 @@ def bewertung_wettkampf():
         st.info(
             f"Diagnose: total in PisteYear={selected_pisteyear}: {total_in_year} | "
             f"ohne selectionpoints-Match: {len(missing_selection_combos)} | "
-            f"selectionpoints vorhanden aber keine JEM/EM/WM/Regional-Zeile: {no_threshold_rows}"
+            f"selectionpoints vorhanden aber keine JEM/EM/WM/Regional-Zeile: {no_threshold_rows} | "
+            f"selectionpoints vorhanden aber keine Regional-Referenz: {no_regional_ref_rows}"
         )
+        if seen_regional_labels:
+            st.info("Gefundene selectionpoints-Competition Labels für Regional: " + ", ".join(sorted(seen_regional_labels)))
         if missing_selection_combos:
             df_missing = pd.DataFrame(missing_selection_combos)
             df_missing = df_missing.drop_duplicates().sort_values(["sex", "Discipline", "CategoryStart"])
@@ -1648,7 +1665,8 @@ def bewertung_wettkampf():
             jem_row = relevant_selection[comp_col == "jem"]
             em_row = relevant_selection[comp_col == "em"]
             wm_row = relevant_selection[comp_col == "wm"]
-            regional_row = relevant_selection[comp_col.isin(["regional", "regionalteam", "regional team", "regio"])]
+            is_regional = comp_col.isin(["regional", "regionalteam", "regional team", "regio"]) | comp_col.str.contains("reg", na=False)
+            regional_row = relevant_selection[is_regional]
 
             jem_qual = bool(comp_row.get("qual-JEM", False))
             em_qual = bool(comp_row.get("qual-EM", False))
