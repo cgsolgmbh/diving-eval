@@ -2168,6 +2168,11 @@ def manage_compresults_entry():
                             skipped_dl.append({"first_name": first, "last_name": last, "reason": "Vor-/Nachname fehlt"})
                             continue
 
+                        athlete = athlete_lookup.get((first.lower(), last.lower()))
+                        if not athlete:
+                            skipped_dl.append({"first_name": first, "last_name": last, "reason": "Athlet nicht in athletes gefunden"})
+                            continue
+
                         category = str(row[cols_by_lower["category"]]).strip()
                         if category.lower() in ("", "nan"):
                             skipped_dl.append({"first_name": first, "last_name": last, "reason": "Category fehlt"})
@@ -2185,9 +2190,7 @@ def manage_compresults_entry():
 
                         sex_val = _normalize_sex_value(row[cols_by_lower["gender"]])
                         if not sex_val:
-                            athlete = athlete_lookup.get((first.lower(), last.lower()))
-                            if athlete:
-                                sex_val = _normalize_sex_value(athlete.get("sex"))
+                            sex_val = _normalize_sex_value(athlete.get("sex"))
 
                         # Team-Flags berechnen (falls möglich) – Import soll nie komplett abstürzen
                         team_flags = {"NationalTeam": "no", "RegionalTeam": "no"}
