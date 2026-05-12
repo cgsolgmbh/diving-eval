@@ -8,6 +8,8 @@ import seaborn as sns
 import numpy as np
 import re
 
+st.set_page_config(page_title="Diving Evaluation", page_icon="🤿")
+
 # Auth handled by login_view()
 # --- Caching für selten geänderte Tabellen ---
 @st.cache_data
@@ -641,7 +643,10 @@ def edit_athletes():
 
         first_name = st.text_input("Vorname", athlete['first_name'])
         last_name = st.text_input("Nachname", athlete['last_name'])
-        birthdate = st.date_input("Geburtsdatum", datetime.datetime.strptime(athlete['birthdate'], "%Y-%m-%d").date())
+        bd = athlete['birthdate']
+        if isinstance(bd, str):
+            bd = datetime.datetime.strptime(bd, "%Y-%m-%d").date()
+        birthdate = st.date_input("Geburtsdatum", bd)
         sex = st.selectbox("Geschlecht", ["male", "female"], index=0 if athlete['sex'] == "male" else 1)
         teams = db.table_select('team', 'ShortName')
         club_options = [t['ShortName'] for t in teams if t.get('ShortName')]
