@@ -2158,9 +2158,8 @@ def piste_refpoint_wettkampf_analyse():
                 continue
 
             colname = f"PisteRefPoints{selected_year}%"
-            percent = row.get(colname)
-            if percent is not None and percent != "":
-                continue  # Überspringe Zeilen, die schon einen Wert haben!
+            existing_percent = row.get(colname)
+            need_percent_update = existing_percent is None or existing_percent == ""
 
             discipline = row.get("Discipline")
             sex = row.get("sex")
@@ -2208,20 +2207,26 @@ def piste_refpoint_wettkampf_analyse():
                 continue
 
             ref_value = ref_row.iloc[0][str(age)]
-            try:
-                ref_value = float(ref_value)
-                points_val = float(points)
-                percent = round((points_val / ref_value) * 100, 1) if ref_value else None
-            except Exception:
-                percent = None
-                continue
+            if need_percent_update:
+                try:
+                    ref_value = float(ref_value)
+                    points_val = float(points)
+                    percent = round((points_val / ref_value) * 100, 1) if ref_value else None
+                except Exception:
+                    percent = None
+                    continue
+            else:
+                try:
+                    percent = float(existing_percent)
+                except Exception:
+                    percent = None
 
-            # Sammle Update für Batch
-            updates.append({
-                "id": row["id"],
-                colname: percent
-            })
-            updated += 1
+            # Sammle Update für Batch — % nur neu schreiben wenn noch nicht vorhanden
+            update_entry = {"id": row["id"]}
+            if need_percent_update and percent is not None:
+                update_entry[colname] = percent
+                updated += 1
+            updates.append(update_entry)
 
             # --- RegionalTeam ---
             discipline_lower = discipline.strip().lower()
