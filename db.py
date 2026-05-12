@@ -1,7 +1,6 @@
 import os
 import time
 import pymssql
-from contextlib import contextmanager
 
 
 def _get_params():
@@ -32,15 +31,14 @@ def _get_params():
     }
 
 
-@contextmanager
-def get_conn():
+def _open_conn():
     """Open a pymssql connection with retry for Azure SQL auto-pause wakeup."""
     p = _get_params()
     last_exc = None
     max_attempts = 6
     for attempt in range(1, max_attempts + 1):
         try:
-            conn = pymssql.connect(
+            return pymssql.connect(
                 server=p["server"],
                 port=p["port"],
                 user=p["user"],
@@ -49,11 +47,6 @@ def get_conn():
                 tds_version="7.4",
                 login_timeout=60,
             )
-            try:
-                yield conn
-            finally:
-                conn.close()
-            return
         except (pymssql.OperationalError, pymssql.InterfaceError) as exc:
             last_exc = exc
             if attempt < max_attempts:
@@ -68,18 +61,24 @@ def get_conn():
 
 def query(sql, params=None):
     """Execute SELECT, return list of dicts."""
-    with get_conn() as conn:
+    conn = _open_conn()
+    try:
         cursor = conn.cursor(as_dict=True)
         cursor.execute(sql, params or ())
         return cursor.fetchall()
+    finally:
+        conn.close()
 
 
 def execute(sql, params=None):
     """Execute INSERT/UPDATE/DELETE."""
-    with get_conn() as conn:
+    conn = _open_conn()
+    try:
         cursor = conn.cursor()
         cursor.execute(sql, params or ())
         conn.commit()
+    finally:
+        conn.close()
 
 
 def table_select(table, select="*", **filters):
@@ -94,10 +93,13 @@ def table_select(table, select="*", **filters):
 
 
 def table_insert(table, data: dict):
-    """INSERT a single row. Auto-assigns id if not provided."""
+    """INSERT a single row. Auto-assigns integer id if not provided (skipped for UNIQUEIDENTIFIER tables)."""
     if "id" not in data:
-        rows = query(f"SELECT ISNULL(MAX(id), 0) AS max_id FROM [{table}]")
-        data = {"id": (rows[0]["max_id"] if rows else 0) + 1, **data}
+        try:
+            rows = query(f"SELECT ISNULL(MAX(id), 0) AS max_id FROM [{table}]")
+            data = {"id": (rows[0]["max_id"] if rows else 0) + 1, **data}
+        except Exception:
+            pass  # id is UNIQUEIDENTIFIER or has DEFAULT — let DB handle it
     cols = ", ".join(f"[{k}]" for k in data)
     placeholders = ", ".join("%s" for _ in data)
     execute(f"INSERT INTO [{table}] ({cols}) VALUES ({placeholders})", list(data.values()))
