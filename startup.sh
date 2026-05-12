@@ -27,6 +27,7 @@ export PYTHONPATH="/home/site/wwwroot:${PYTHONPATH}"
 # Also cp as belt-and-suspenders
 APP_DIR=$(dirname "$APP_PY")
 cp /home/site/wwwroot/db.py "$APP_DIR/db.py" 2>/dev/null || true
+cp /home/site/wwwroot/app.py "$APP_DIR/app.py" 2>/dev/null || true
 
 echo "=== STARTUP $(date): APP_PY=$APP_PY ===" >> /home/site/startup_debug.log
 echo "DB_PY_USER=$(head -20 $APP_DIR/db.py | grep -c 'User ID')" >> /home/site/startup_debug.log

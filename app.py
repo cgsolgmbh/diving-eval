@@ -2145,8 +2145,13 @@ def piste_refpoint_wettkampf_analyse():
         athlete_name_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a['vintage'] for a in athletes}
         refpoints_df = pd.DataFrame(pisterefcomppoints)
 
-        updates = []
+        if refpoints_df.empty or "Discipline" not in refpoints_df.columns:
+            st.error("❌ Tabelle 'pisterefcomppoints' ist leer oder hat falsche Spalten. Bitte Daten neu importieren (_fix_pisterefcomppoints.py ausführen).")
+            return
+
+
         updated = 0
+        updates = []
 
         for row in compresults:
             competition_name = str(row.get("Competition", "")).strip().lower()
@@ -2306,7 +2311,7 @@ def piste_refpoint_wettkampf_analyse():
             st.error(f"Spalte {ref_col} nicht gefunden!")
         else:
             competitions = db.table_select('competitions', 'Name, PisteYear')
-            comp_map = {c['Name']: c.get('PisteYear') for c in competitions}
+            comp_map = {c['Name']: (int(c.get('PisteYear')) if c.get('PisteYear') else None) for c in competitions}
             df["PisteYear"] = df["Competition"].map(comp_map)
             athletes = db.table_select('athletes', 'first_name, last_name, vintage')
             athlete_vintage = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a['vintage'] for a in athletes}
@@ -2328,6 +2333,8 @@ def piste_refpoint_wettkampf_analyse():
                 df['first_name'].str.strip().str.lower(),
                 df['last_name'].str.strip().str.lower()
             ])
+            max_id_row = db.query("SELECT ISNULL(MAX(id), 0) AS max_id FROM [pisterefcompresults]")
+            next_id = (max_id_row[0]['max_id'] if max_id_row else 0) + 1
             inserted = 0
             for (first, last), group in grouped:
                 group = group.sort_values(ref_col, ascending=False)
@@ -2339,11 +2346,13 @@ def piste_refpoint_wettkampf_analyse():
                     continue
                 age = int(selected_year) - int(vintage)
                 data = {
+                    "id": next_id,
                     "first_name": top3.iloc[0]['first_name'],
                     "last_name": top3.iloc[0]['last_name'],
                     "age": age,
                     "PisteYear": int(selected_year),
                 }
+                next_id += 1
                 pointsaverage = []
                 for i in range(1, 4):
                     if len(top3) >= i:
@@ -2435,15 +2444,16 @@ def piste_refpoint_wettkampf_analyse():
             st.warning("Keine Daten in pisterefcompresults für die gewählten Jahre gefunden.")
         else:
             df = pd.DataFrame(refcompresults)
+            df["PisteYear"] = df["PisteYear"].astype(str)
             grouped = df.groupby([df['first_name'].str.strip().str.lower(), df['last_name'].str.strip().str.lower()])
             updated = 0
             for (first, last), group in grouped:
                 group = group.sort_values("PisteYear")
-                this_year_row = group[group["PisteYear"] == int(selected_year)]
+                this_year_row = group[group["PisteYear"] == str(selected_year)]
                 if this_year_row.empty:
                     continue
                 this_year_value = this_year_row.iloc[0].get("refaverage")
-                prev_years = group[group["PisteYear"] != int(selected_year)]
+                prev_years = group[group["PisteYear"] != str(selected_year)]
                 prev_values = prev_years["refaverage"].dropna().tolist()
                 if len(prev_values) < 1 or this_year_value is None:
                     continue
@@ -2459,7 +2469,7 @@ def piste_refpoint_wettkampf_analyse():
                 db.table_update('pisterefcompresults', {"performance": performance},
                     first_name=this_year_row.iloc[0]["first_name"],
                     last_name=this_year_row.iloc[0]["last_name"],
-                    PisteYear=int(selected_year))
+                    PisteYear=str(selected_year))
                 updated += 1
 
             # DiveQuality-Berechnung
@@ -2468,11 +2478,11 @@ def piste_refpoint_wettkampf_analyse():
             compresults = fetch_all_rows('compresults', select='*')
             competitions = db.table_select("competitions", "Name, PisteYear")
             compresults_df = pd.DataFrame(compresults)
-            comp_map = {c["Name"]: c.get("PisteYear") for c in competitions}
+            comp_map = {c["Name"]: (int(c.get("PisteYear")) if c.get("PisteYear") else None) for c in competitions}
             compresults_df["PisteYear"] = compresults_df["Competition"].map(comp_map)
             for (first, last), group in grouped:
                 group = group.sort_values("PisteYear")
-                this_year_row = group[group["PisteYear"] == int(selected_year)]
+                this_year_row = group[group["PisteYear"] == str(selected_year)]
                 if this_year_row.empty:
                     continue
                 age = this_year_row.iloc[0].get("age")
@@ -3175,12 +3185,16 @@ def soc_full_calculation():
             athlete_data_map[key]["CompPointsRegionalTeam"] = "yes" if relevant_results_regio else "no"
 
         # --- Jetzt alle Daten in socadditionalvalues schreiben (Batch) ---
+        max_id_row = db.query("SELECT ISNULL(MAX(id), 0) AS max_id FROM [socadditionalvalues]")
+        next_id = (max_id_row[0]['max_id'] if max_id_row else 0) + 1
         updates = []
         for key, data in athlete_data_map.items():
             existing = existing_lookup.get(key)
             if existing:
                 updates.append(("update", data))
             else:
+                data["id"] = next_id
+                next_id += 1
                 updates.append(("insert", data))
 
         batch_size = 500

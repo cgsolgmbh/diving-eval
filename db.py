@@ -37,7 +37,8 @@ def get_conn():
     """Open a pymssql connection with retry for Azure SQL auto-pause wakeup."""
     p = _get_params()
     last_exc = None
-    for attempt in range(1, 4):
+    max_attempts = 6
+    for attempt in range(1, max_attempts + 1):
         try:
             conn = pymssql.connect(
                 server=p["server"],
@@ -46,7 +47,7 @@ def get_conn():
                 password=p["password"],
                 database=p["database"],
                 tds_version="7.4",
-                login_timeout=30,
+                login_timeout=60,
             )
             try:
                 yield conn
@@ -55,13 +56,13 @@ def get_conn():
             return
         except (pymssql.OperationalError, pymssql.InterfaceError) as exc:
             last_exc = exc
-            if attempt < 3:
+            if attempt < max_attempts:
                 try:
                     import streamlit as st
-                    st.toast(f"Datenbank wacht auf\u2026 (Versuch {attempt}/3)", icon="\u23f3")
+                    st.toast(f"Datenbank wacht auf\u2026 (Versuch {attempt}/{max_attempts})", icon="\u23f3")
                 except Exception:
                     pass
-                time.sleep(10)
+                time.sleep(20)
     raise last_exc
 
 
@@ -93,7 +94,10 @@ def table_select(table, select="*", **filters):
 
 
 def table_insert(table, data: dict):
-    """INSERT a single row."""
+    """INSERT a single row. Auto-assigns id if not provided."""
+    if "id" not in data:
+        rows = query(f"SELECT ISNULL(MAX(id), 0) AS max_id FROM [{table}]")
+        data = {"id": (rows[0]["max_id"] if rows else 0) + 1, **data}
     cols = ", ".join(f"[{k}]" for k in data)
     placeholders = ", ".join("%s" for _ in data)
     execute(f"INSERT INTO [{table}] ({cols}) VALUES ({placeholders})", list(data.values()))

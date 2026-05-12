@@ -1,0 +1,15 @@
+# Streamlit secrets (contains passwords — NEVER commit!)
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
