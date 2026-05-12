@@ -1,48 +1,14 @@
 import streamlit as st
-# --- JavaScript-Snippet für OAuth-Token-Handling ---
-st.components.v1.html("""
-<script>
-window.addEventListener('DOMContentLoaded', (event) => {
-    if (window.location.hash) {
-        const params = new URLSearchParams(window.location.hash.substr(1));
-        if (params.get('access_token')) {
-            const url = new URL(window.location);
-            url.searchParams.set('access_token', params.get('access_token'));
-            url.searchParams.set('refresh_token', params.get('refresh_token'));
-            setTimeout(function() {
-                window.location.replace(url.toString().split('#')[0]);
-            }, 100); // 100ms Verzögerung
-        }
-    }
-});
-</script>
-""")
 import datetime
 import pandas as pd
-from supabase import create_client, Client
+import db
 import importlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import re
 
-# 🔑 Supabase-Konfiguration
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# Token aus URL-Fragment holen (nur beim allerersten Aufruf nach OAuth)
-if "access_token" not in st.session_state:
-    params = st.query_params
-    if "access_token" in params:
-        st.session_state["access_token"] = params["access_token"]
-        st.session_state["refresh_token"] = params.get("refresh_token")
-        # User holen und Session setzen
-        user = supabase.auth.get_user(st.session_state["access_token"])
-        st.session_state["user"] = user
-        # Kein st.rerun() mehr hier!
-        # Seite wird ohnehin durch das JavaScript-Snippet neu geladen
-        # und der Token ist dann aus der URL verschwunden
+# Auth handled by login_view()
 # --- Caching für selten geänderte Tabellen ---
 @st.cache_data
 
@@ -65,36 +31,22 @@ def is_excluded_discipline_local(discipline, age, year, agecat_df):
     )
 
 def get_pistedisciplines():
-    return supabase.table('pistedisciplines').select('id, name').execute().data
+    return db.table_select('pistedisciplines', 'id, name')
 
 @st.cache_data
 def get_athletes():
-    return supabase.table('athletes').select('id, full_name, sex, vintage, category').execute().data
+    return db.table_select('athletes', 'id, full_name, sex, vintage, category')
 
 @st.cache_data
 def get_agecategories():
-    return supabase.table('agecategories').select('*').execute().data
+    return db.table_select('agecategories')
 
 @st.cache_data
 def get_scoretables():
-    return supabase.table('scoretables').select('*').execute().data
+    return db.table_select('scoretables')
 
 def fetch_all_rows(table, select="*", **filters):
-    """Lädt alle Zeilen aus einer Supabase-Tabelle in Blöcken von 1000."""
-    all_rows = []
-    offset = 0
-    while True:
-        query = supabase.table(table).select(select).range(offset, offset + 999)
-        for key, value in filters.items():
-            query = query.eq(key, value)
-        rows = query.execute().data
-        if not rows:
-            break
-        all_rows.extend(rows)
-        if len(rows) < 1000:
-            break
-        offset += 1000
-    return all_rows
+    return db.table_select(table, select, **filters)
 
 def get_lookup_dict(data, key, value):
     return {d[key]: d[value] for d in data}
@@ -108,11 +60,7 @@ def get_points(discipline_id, result, category, sex):
         # NEU: Wenn raw_result 9999 ist, immer 0 Punkte zurückgeben
         if str(result).strip() == "9999":
             return 0
-        score_rows = supabase.table('scoretables').select('*')\
-            .eq('discipline_id', discipline_id)\
-            .eq('category', category.strip())\
-            .eq('sex', sex.capitalize())\
-            .execute().data
+        score_rows = db.table_select('scoretables', discipline_id=discipline_id, category=category.strip(), sex=sex.capitalize())
         score_rows = sorted(score_rows, key=lambda x: float(x['result_min']) if x['result_min'] not in (None, "", "nan") else float('-inf'))
         for row in score_rows:
             try:
@@ -138,63 +86,24 @@ def login_view():
     email = st.text_input("E-Mail")
     password = st.text_input("Passwort", type="password")
 
-    # Klassischer Login
+    erlaubte_emails = [
+        "chris@greuters.com",
+        "christian.greuter@outlook.com",
+        "christian.greuter@cgsol.ch",
+        "christian.greuter@swiss-aquatics.ch",
+        "christian.finger@swiss-aquatics.ch"
+    ]
+
     if st.button("Einloggen") and email and password:
         try:
-            auth_result = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            user = auth_result.user
-
-            if not user:
-                st.error("Login fehlgeschlagen – Benutzer nicht gefunden.")
-                return
-
-            erlaubte_emails = [
-                "chris@greuters.com"
-                "christian.greuter@outlook.com",
-                "christian.greuter@cgsol.ch",
-                "christian.greuter@swiss-aquatics.ch",
-                "christian.finger@swiss-aquatics.ch"
-            ]
-
-            if user.email not in erlaubte_emails:
-                st.error("⛔ Zugriff verweigert: Du bist nicht berechtigt.")
-                return
-
-            # 🔑 Login erfolgreich, Session speichern
-            st.session_state["user"] = user
-            st.rerun()
-
+            admin_pw = st.secrets.get("ADMIN_PASSWORD", "")
+            if email in erlaubte_emails and password == admin_pw:
+                st.session_state["user"] = {"email": email}
+                st.rerun()
+            else:
+                st.error("Login fehlgeschlagen – E-Mail oder Passwort falsch.")
         except Exception as e:
             st.error(f"Login fehlgeschlagen: {e}")
-
-    st.markdown("---")
-    st.markdown("Oder mit Microsoft anmelden:")
-
-    # Azure OAuth-Login
-    redirect_url = st.secrets["OAUTH_REDIRECT_URL"]
-    oauth_url = (
-        f"{SUPABASE_URL}/auth/v1/authorize"
-        f"?provider=azure"
-        f"&redirect_to={redirect_url}"
-    )
-    st.markdown(
-        f'''
-        <a href="{oauth_url}" target="_blank" style="text-decoration:none;">
-            <button style="
-                background-color:#2d7ff9;
-                color:white;
-                padding:0.5em 1.5em;
-                border:none;
-                border-radius:4px;
-                font-size:1.1em;
-                cursor:pointer;
-            ">
-                🔵 Mit Microsoft anmelden
-            </button>
-        </a>
-        ''',
-        unsafe_allow_html=True
-    )
 
 def logout_button():
     if st.button("🚪 Logout"):
@@ -288,21 +197,7 @@ def startseite():
             st.rerun()
 
 def fetch_all_rows(table, select="*", **filters):
-    """Lädt alle Zeilen aus einer Supabase-Tabelle in Blöcken von 1000."""
-    all_rows = []
-    offset = 0
-    while True:
-        query = supabase.table(table).select(select).range(offset, offset + 999)
-        for key, value in filters.items():
-            query = query.eq(key, value)
-        rows = query.execute().data
-        if not rows:
-            break
-        all_rows.extend(rows)
-        if len(rows) < 1000:
-            break
-        offset += 1000
-    return all_rows
+    return db.table_select(table, select, **filters)
 
 def get_category_from_agecategories(vintage, pisteyear, agecategories):
     try:
@@ -521,11 +416,7 @@ def get_points(discipline_id, result, category, sex):
         if not discipline_id or not category or not sex:
             return 0
 
-        score_rows = supabase.table('scoretables').select('*')\
-            .eq('discipline_id', discipline_id)\
-            .eq('category', category.strip())\
-            .eq('sex', sex.capitalize())\
-            .execute().data
+        score_rows = db.table_select('scoretables', discipline_id=discipline_id, category=category.strip(), sex=sex.capitalize())
 
         score_rows = sorted(score_rows, key=lambda x: float(x['result_min']))
 
@@ -545,7 +436,7 @@ def get_points(discipline_id, result, category, sex):
 # Alterskategorie
 def get_category_from_testyear(vintage, test_year):
     age = int(test_year) - int(vintage)
-    categories = supabase.table('agecategories').select('*').execute().data
+    categories = db.table_select('agecategories')
     for cat in categories:
         if cat['min_age'] <= age <= cat['max_age']:
             return cat['category']
@@ -553,20 +444,7 @@ def get_category_from_testyear(vintage, test_year):
 
 # Ergebnisseingabe
 def get_athletes():
-    # Holt alle Athleten aus Supabase, auch bei mehr als 1000 Einträgen
-    all_athletes = []
-    page = 0
-    page_size = 1000
-    while True:
-        result = supabase.table("athletes").select("*").range(page * page_size, (page + 1) * page_size - 1).execute()
-        data = result.data if hasattr(result, "data") else result.get("data", [])
-        if not data:
-            break
-        all_athletes.extend(data)
-        if len(data) < page_size:
-            break
-        page += 1
-    return all_athletes
+    return db.table_select('athletes')
 
 def manage_results_entry():
     st.header("🎯 Ergebnisse für einen Athleten eingeben")
@@ -633,18 +511,17 @@ def manage_results_entry():
                 else:
                     points = get_points(discipline_id, raw_result, category, sex)
 
-                existing = supabase.table('pisteresults').select('id').eq('athlete_id', athlete_id)\
-                    .eq('discipline_id', discipline_id).eq('TestYear', int(test_year)).execute().data
+                existing = db.table_select('pisteresults', 'id', athlete_id=athlete_id, discipline_id=discipline_id, TestYear=int(test_year))
 
                 if existing:
-                    supabase.table('pisteresults').update({
+                    db.table_update('pisteresults', {
                         'raw_result': raw_result,
                         'points': points,
                         'category': category,
                         'sex': sex
-                    }).eq('id', existing[0]['id']).execute()
+                    }, id=existing[0]['id'])
                 else:
-                    supabase.table('pisteresults').insert({
+                    db.table_insert('pisteresults', {
                         'athlete_id': athlete_id,
                         'discipline_id': discipline_id,
                         'raw_result': raw_result,
@@ -652,7 +529,7 @@ def manage_results_entry():
                         'category': category,
                         'sex': sex,
                         'TestYear': int(test_year)
-                    }).execute()
+                    })
 
             st.success("✅ Ergebnisse gespeichert und Punkte berechnet!")
 
@@ -725,18 +602,17 @@ def manage_results_entry():
                 else:
                     points = get_points(discipline_id, raw_result, category, sex)
 
-                existing = supabase.table('pisteresults').select('id').eq('athlete_id', athlete_id)\
-                    .eq('discipline_id', discipline_id).eq('TestYear', test_year).execute().data
+                existing = db.table_select('pisteresults', 'id', athlete_id=athlete_id, discipline_id=discipline_id, TestYear=test_year)
 
                 if existing:
-                    supabase.table('pisteresults').update({
+                    db.table_update('pisteresults', {
                         'raw_result': raw_result,
                         'points': points,
                         'category': category,
                         'sex': sex
-                    }).eq('id', existing[0]['id']).execute()
+                    }, id=existing[0]['id'])
                 else:
-                    supabase.table('pisteresults').insert({
+                    db.table_insert('pisteresults', {
                         'athlete_id': athlete_id,
                         'discipline_id': discipline_id,
                         'raw_result': raw_result,
@@ -744,7 +620,7 @@ def manage_results_entry():
                         'category': category,
                         'sex': sex,
                         'TestYear': test_year
-                    }).execute()
+                    })
             inserted_count += 1
 
         st.success(f"✅ {inserted_count} Ergebnisse importiert.")
@@ -755,19 +631,19 @@ def manage_results_entry():
 # Athleten bearbeiten
 def edit_athletes():
     st.header("✏️ Athleten bearbeiten")
-    athletes = supabase.table('athletes').select('*').execute().data
+    athletes = db.table_select('athletes')
     athlete_names = {f"{a['first_name']} {a['last_name']}": a['id'] for a in athletes}
     selected_name = st.selectbox("Athlet auswählen", list(athlete_names.keys()))
 
     if selected_name:
         athlete_id = athlete_names[selected_name]
-        athlete = supabase.table('athletes').select('*').eq('id', athlete_id).execute().data[0]
+        athlete = db.table_select('athletes', id=athlete_id)[0]
 
         first_name = st.text_input("Vorname", athlete['first_name'])
         last_name = st.text_input("Nachname", athlete['last_name'])
         birthdate = st.date_input("Geburtsdatum", datetime.datetime.strptime(athlete['birthdate'], "%Y-%m-%d").date())
         sex = st.selectbox("Geschlecht", ["male", "female"], index=0 if athlete['sex'] == "male" else 1)
-        teams = supabase.table('team').select('ShortName').execute().data
+        teams = db.table_select('team', 'ShortName')
         club_options = [t['ShortName'] for t in teams if t.get('ShortName')]
         default_index = club_options.index(athlete['club']) if athlete['club'] in club_options else 0
         club = st.selectbox("Verein", club_options, index=default_index)
@@ -777,7 +653,7 @@ def edit_athletes():
             vintage = birthdate.year
             full_name = f"{first_name} {last_name}"
             category = get_category_from_testyear(vintage, datetime.date.today().year)
-            supabase.table('athletes').update({
+            db.table_update('athletes', {
                 'first_name': first_name,
                 'last_name': last_name,
                 'birthdate': birthdate.strftime('%Y-%m-%d'),
@@ -787,7 +663,7 @@ def edit_athletes():
                 'vintage': vintage,
                 'full_name': full_name,
                 'category': category
-            }).eq('id', athlete_id).execute()
+            }, id=athlete_id)
             st.success("Athletendaten aktualisiert.")
 
 # Auswertung starten
@@ -886,16 +762,16 @@ def auswertung_starten():
 def manage_scoretable():
     st.header("📋 Scoretabelle verwalten")
 
-    disciplines = supabase.table('pistedisciplines').select('id, name').execute().data
+    disciplines = db.table_select('pistedisciplines', 'id, name')
     discipline_map = {d['name']: d['id'] for d in disciplines}
     selected_discipline = st.selectbox("Disziplin auswählen", list(discipline_map.keys()))
 
-    categories = supabase.table('agecategories').select('category').execute().data
+    categories = db.table_select('agecategories', 'category')
     category_options = sorted(list(set(c['category'] for c in categories)))
 
     if selected_discipline:
         discipline_id = discipline_map[selected_discipline]
-        entries = supabase.table('scoretables').select('*').eq('discipline_id', discipline_id).order('result_min').execute().data
+        entries = db.query("SELECT * FROM [scoretables] WHERE [discipline_id] = ? ORDER BY result_min", [discipline_id])
 
         st.subheader(f"Aktuelle Punktebereiche für {selected_discipline}")
         if entries:
@@ -911,20 +787,20 @@ def manage_scoretable():
                     with col1:
                         if st.button("💾 Speichern", key=f"save_{entry['id']}"):
                             if new_max >= new_min:
-                                supabase.table('scoretables').update({
+                                db.table_update('scoretables', {
                                     'result_min': new_min,
                                     'result_max': new_max,
                                     'points': new_points,
                                     'category': new_category,
                                     'sex': new_sex
-                                }).eq('id', entry['id']).execute()
+                                }, id=entry['id'])
                                 st.success("Eintrag aktualisiert.")
                                 st.rerun()
                             else:
                                 st.error("❗ 'Bis' muss größer oder gleich 'Von' sein.")
                     with col2:
                         if st.button("🗑️ Löschen", key=f"delete_{entry['id']}"):
-                            supabase.table('scoretables').delete().eq('id', entry['id']).execute()
+                            db.table_delete('scoretables', id=entry['id'])
                             st.warning("Eintrag gelöscht.")
                             st.rerun()
         else:
@@ -939,14 +815,14 @@ def manage_scoretable():
 
         if st.button("➕ Eintrag speichern", key="add_save"):
             if result_max >= result_min:
-                supabase.table('scoretables').insert({
+                db.table_insert('scoretables', {
                     'discipline_id': discipline_id,
                     'result_min': result_min,
                     'result_max': result_max,
                     'points': points,
                     'category': new_category,
                     'sex': new_sex
-                }).execute()
+                })
                 st.success("Eintrag hinzugefügt!")
                 st.rerun()
             else:
@@ -957,7 +833,7 @@ def import_athletes():
 
     # Button für Bioage-Update ALLER Athleten
     if st.button("🔄 Bioage für alle bestehenden Athleten berechnen und speichern"):
-        athletes = supabase.table("athletes").select("id, birthdate").execute().data
+        athletes = db.table_select("athletes", "id, birthdate")
         updated = 0
         skipped = 0
         for a in athletes:
@@ -968,7 +844,7 @@ def import_athletes():
                 continue
             bioage = get_birth_quarter(birthdate)
             if bioage:
-                supabase.table("athletes").update({"bioage": bioage}).eq("id", athlete_id).execute()
+                db.table_update("athletes", {"bioage": bioage}, id=athlete_id)
                 updated += 1
             else:
                 skipped += 1
@@ -1011,9 +887,7 @@ def import_athletes():
                 bioage = get_birth_quarter(birthdate)
 
                 # Prüfen, ob Athlet bereits existiert
-                existing = supabase.table('athletes').select('id').eq('first_name', row['first_name'].strip())\
-                    .eq('last_name', row['last_name'].strip())\
-                    .eq('birthdate', birthdate).execute().data
+                existing = db.table_select('athletes', 'id', first_name=row['first_name'].strip(), last_name=row['last_name'].strip(), birthdate=birthdate)
                 if existing:
                     skipped_duplicates.append({
                         "first_name": row['first_name'],
@@ -1022,7 +896,7 @@ def import_athletes():
                     })
                     continue
 
-                supabase.table('athletes').insert({
+                db.table_insert('athletes', {
                     'first_name': row['first_name'],
                     'last_name': row['last_name'],
                     'birthdate': birthdate,
@@ -1033,7 +907,7 @@ def import_athletes():
                     'full_name': full_name,
                     'category': category,
                     'bioage': bioage
-                }).execute()
+                })
                 inserted += 1
             except Exception as e:
                 st.warning(f"Fehler beim Einfügen von {row['first_name']} {row['last_name']}: {e}")
@@ -1046,7 +920,7 @@ def import_athletes():
 
 def delete_athlete():
     st.header("🗑️ Athlet löschen")
-    athletes = supabase.table('athletes').select('id, first_name, last_name, birthdate, club').execute().data
+    athletes = db.table_select('athletes', 'id, first_name, last_name, birthdate, club')
 
     if not athletes:
         st.info("Keine Athleten vorhanden.")
@@ -1071,9 +945,8 @@ def delete_athlete():
         if st.button("❗ Endgültig löschen"):
             try:
                 # Ergebnisse löschen
-                supabase.table('pisteresults').delete().eq('athlete_id', athlete_id).execute()
-                # Athlet löschen
-                supabase.table('athletes').delete().eq('id', athlete_id).execute()
+                db.table_delete('pisteresults', athlete_id=athlete_id)
+                db.table_delete('athletes', id=athlete_id)
                 st.success(f"Athlet '{selected_name}' und alle zugehörigen Ergebnisse wurden gelöscht.")
                 st.rerun()
             except Exception as e:
@@ -1138,10 +1011,10 @@ def punkte_neuberechnen():
 
             new_points = 0 if discipline_id in excluded_ids else get_points(discipline_id, raw_result, category, sex)
 
-            supabase.table("pisteresults").update({
+            db.table_update("pisteresults", {
                 "points": new_points,
                 "category": category
-            }).eq("id", entry["id"]).execute()
+            }, id=entry["id"])
             updated_count += 1
 
         # 2. Für jeden Athleten im Jahr: Spezialdisziplinen berechnen und speichern
@@ -1178,14 +1051,14 @@ def punkte_neuberechnen():
                     TestYear=selected_year
                 )
                 if existing_total:
-                    supabase.table('pisteresults').update({
+                    db.table_update('pisteresults', {
                         'raw_result': total_points,
                         'points': total_points,
                         'category': category,
                         'sex': sex
-                    }).eq('id', existing_total[0]['id']).execute()
+                    }, id=existing_total[0]['id'])
                 else:
-                    supabase.table('pisteresults').insert({
+                    db.table_insert('pisteresults', {
                         'athlete_id': athlete_id,
                         'discipline_id': pistetotalpoints_id,
                         'raw_result': total_points,
@@ -1193,7 +1066,7 @@ def punkte_neuberechnen():
                         'category': category,
                         'sex': sex,
                         'TestYear': int(selected_year)
-                    }).execute()
+                    })
 
             # --- PistePointsDurchschnitt speichern und bewerten ---
             if pistepointsdurchschnitt_id:
@@ -1218,14 +1091,14 @@ def punkte_neuberechnen():
                     TestYear=selected_year
                 )
                 if existing_avg:
-                    supabase.table('pisteresults').update({
+                    db.table_update('pisteresults', {
                         'raw_result': avg_points,
                         'points': bewertung,
                         'category': category,
                         'sex': sex
-                    }).eq('id', existing_avg[0]['id']).execute()
+                    }, id=existing_avg[0]['id'])
                 else:
-                    supabase.table('pisteresults').insert({
+                    db.table_insert('pisteresults', {
                         'athlete_id': athlete_id,
                         'discipline_id': pistepointsdurchschnitt_id,
                         'raw_result': avg_points,
@@ -1233,7 +1106,7 @@ def punkte_neuberechnen():
                         'category': category,
                         'sex': sex,
                         'TestYear': int(selected_year)
-                    }).execute()
+                    })
 
             # --- PisteTotalinPoints speichern (Bewertung des Durchschnitts) ---
             if pistetotalinpoints_id:
@@ -1257,14 +1130,14 @@ def punkte_neuberechnen():
                     TestYear=selected_year
                 )
                 if existing_totalin:
-                    supabase.table('pisteresults').update({
+                    db.table_update('pisteresults', {
                         'raw_result': avg_points,
                         'points': pistetotalinpoints_value,
                         'category': category,
                         'sex': sex
-                    }).eq('id', existing_totalin[0]['id']).execute()
+                    }, id=existing_totalin[0]['id'])
                 else:
-                    supabase.table('pisteresults').insert({
+                    db.table_insert('pisteresults', {
                         'athlete_id': athlete_id,
                         'discipline_id': pistetotalinpoints_id,
                         'raw_result': avg_points,
@@ -1272,7 +1145,7 @@ def punkte_neuberechnen():
                         'category': category,
                         'sex': sex,
                         'TestYear': int(selected_year)
-                    }).execute()
+                    })
 
         st.success(f"✅ {updated_count} Resultate für das Jahr {selected_year} wurden neu bewertet.")
 
@@ -1412,7 +1285,7 @@ def bewertung_wettkampf():
             # If sex was missing, persist it immediately
             if sex and _needs_sex_update(row.get('sex')):
                 try:
-                    supabase.table('compresults').update({"sex": sex}).eq("id", comp_id).execute()
+                    db.table_update('compresults', {"sex": sex}, id=comp_id)
                 except Exception:
                     pass
 
@@ -1521,7 +1394,7 @@ def bewertung_wettkampf():
                 "AveragePoints": average_points,
                 "timestamp": now_str
             }
-            supabase.table('compresults').update(update_payload).eq("id", comp_id).execute()
+            db.table_update('compresults', update_payload, id=comp_id)
         st.success("Alle Wettkampfbewertungen wurden neu berechnet!")
 
     if selected_pisteyear and st.button(f"🔄 Nur PisteYear {selected_pisteyear} neu berechnen"):
@@ -1556,7 +1429,7 @@ def bewertung_wettkampf():
             # If sex was missing, persist it immediately (needed for selectionpoints matching)
             if sex and _needs_sex_update(row.get('sex')):
                 try:
-                    supabase.table('compresults').update({"sex": sex}).eq("id", comp_id).execute()
+                    db.table_update('compresults', {"sex": sex}, id=comp_id)
                 except Exception:
                     pass
 
@@ -1676,7 +1549,7 @@ def bewertung_wettkampf():
                 "AveragePoints": average_points,
                 "timestamp": now_str
             }
-            supabase.table('compresults').update(update_payload).eq("id", comp_id).execute()
+            db.table_update('compresults', update_payload, id=comp_id)
             updated_count += 1
 
         st.success(f"✅ {updated_count} Resultate für PisteYear {selected_pisteyear} wurden neu berechnet.")
@@ -1705,7 +1578,7 @@ def bewertung_wettkampf():
             sex = resolve_sex_for_compresult(row)
             if sex and _needs_sex_update(row.get('sex')):
                 try:
-                    supabase.table('compresults').update({"sex": sex}).eq("id", comp_id).execute()
+                    db.table_update('compresults', {"sex": sex}, id=comp_id)
                 except Exception:
                     pass
 
@@ -1809,7 +1682,7 @@ def bewertung_wettkampf():
                 "AveragePoints": average_points,
                 "timestamp": now_str
             }
-            supabase.table('compresults').update(update_payload).eq("id", comp_id).execute()
+            db.table_update('compresults', update_payload, id=comp_id)
         st.success("Neue Einträge wurden berechnet!")
 
     # TESTTOOL: Timestamps zurücksetzen
@@ -1818,7 +1691,7 @@ def bewertung_wettkampf():
             try:
                 comp_results = fetch_all_rows("compresults")
                 for row in comp_results:
-                    supabase.table("compresults").update({"timestamp": None}).eq("id", row["id"]).execute()
+                    db.table_update('compresults', {"timestamp": None}, id=row["id"])
                 st.success("Alle Timestamps wurden zurückgesetzt.")
             except Exception as e:
                 st.error(f"Fehler beim Zurücksetzen: {e}")
@@ -1941,7 +1814,7 @@ def manage_compresults_entry():
             if not comp_name:
                 st.error("Bitte einen Namen eingeben.")
             else:
-                supabase.table("competitions").insert({
+                db.table_insert("competitions", {
                     "Name": comp_name,
                     "Date": comp_date.strftime("%Y-%m-%d"),
                     "qual-Regional": qual_regional,
@@ -1952,7 +1825,7 @@ def manage_compresults_entry():
                     "qual-Piste": qual_piste,
                     "Type": comp_type,
                     "PisteYear": int(piste_year)
-                }).execute()
+                })
                 st.success("Wettkampf gespeichert!")
                 st.session_state["show_new_comp_form"] = False
         st.stop()
@@ -1963,7 +1836,7 @@ def manage_compresults_entry():
     selected_athlete = st.selectbox("Athlet", list(athlete_names.keys()))
     athlete_data = athlete_names[selected_athlete] if selected_athlete else None
 
-    competitions = fetch_all_rows('competitions', select='Name, Date, PisteYear, qual-Regional, qual-JEM, qual-EM, qual-WM')
+    competitions = fetch_all_rows('competitions', select='Name, Date, PisteYear, [qual-Regional], [qual-JEM], [qual-EM], [qual-WM]')
     competition_names = [c['Name'] for c in competitions]
     selected_competition = st.selectbox("Wettkampf", competition_names)
 
@@ -1988,7 +1861,7 @@ def manage_compresults_entry():
                 competitions_df=competitions_df,
                 selectionpoints_df=selectionpoints_df,
             )
-            supabase.table('compresults').insert({
+            db.table_insert('compresults', {
                 "first_name": athlete_data['first_name'],
                 "last_name": athlete_data['last_name'],
                 "sex": athlete_data['sex'],
@@ -1999,7 +1872,7 @@ def manage_compresults_entry():
                 "Points": points,
                 "Difficulty": difficulty,
                 **team_flags,
-            }).execute()
+            })
             st.success("Wettkampfresultat gespeichert!")
 
     st.markdown("---")
@@ -2046,7 +1919,7 @@ def manage_compresults_entry():
                     competitions_df=competitions_df,
                     selectionpoints_df=selectionpoints_df,
                 )
-                supabase.table('compresults').insert({
+                db.table_insert('compresults', {
                     "first_name": first,
                     "last_name": last,
                     "sex": athlete["sex"],
@@ -2057,7 +1930,7 @@ def manage_compresults_entry():
                     "Points": row["Points"],
                     "Difficulty": row["Difficulty"],
                     **team_flags,
-                }).execute()
+                })
                 inserted += 1
             except Exception as e:
                 st.warning(f"Fehler bei {first} {last}: {e}")
@@ -2208,7 +2081,7 @@ def manage_compresults_entry():
                         except Exception as e:
                             skipped_dl.append({"first_name": first, "last_name": last, "reason": f"Team-Flags Fehler: {e}"})
 
-                        supabase.table('compresults').insert({
+                        db.table_insert('compresults', {
                             "first_name": first,
                             "last_name": last,
                             "sex": sex_val,
@@ -2219,7 +2092,7 @@ def manage_compresults_entry():
                             "Points": points_val,
                             "Difficulty": 0.0,
                             **team_flags,
-                        }).execute()
+                        })
                         inserted_dl += 1
                     except Exception as e:
                         skipped_dl.append({"first_name": first if 'first' in locals() else "", "last_name": last if 'last' in locals() else "", "reason": f"Import Fehler: {e}"})
@@ -2242,7 +2115,7 @@ def safe_numeric(val):
 def piste_refpoint_wettkampf_analyse():
     st.header("📊 Piste RefPoint Wettkampf Analyse")
 
-    agecategories = supabase.table("agecategories").select("*").execute().data
+    agecategories = db.table_select("agecategories", '*')
     agecat_df = pd.DataFrame(agecategories)
     selectionpoints = fetch_all_rows('selectionpoints')
     sel_df = pd.DataFrame(selectionpoints)
@@ -2262,10 +2135,10 @@ def piste_refpoint_wettkampf_analyse():
         st.info("Starte: Berechnen ...")
         selected_year_int = int(selected_year)
 
-        competitions = supabase.table('competitions').select('Name, Date, PisteYear, qual-Regional, qual-National').execute().data
+        competitions = db.table_select('competitions', 'Name, Date, PisteYear, [qual-Regional], [qual-National]')
         compresults = fetch_all_rows('compresults', select='*')
-        athletes = supabase.table('athletes').select('id, vintage, first_name, last_name').execute().data
-        pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
+        athletes = db.table_select('athletes', 'id, vintage, first_name, last_name')
+        pisterefcomppoints = db.table_select('pisterefcomppoints', '*')
 
         comp_qual_lookup = {str(c['Name']).strip().lower(): c for c in competitions}
         athlete_vintage = {a['id']: a['vintage'] for a in athletes}
@@ -2413,7 +2286,9 @@ def piste_refpoint_wettkampf_analyse():
         for i in range(0, len(updates), batch_size):
             batch = updates[i:i+batch_size]
             for entry in batch:
-                supabase.table('compresults').update(entry).eq("id", entry["id"]).execute()
+                entry_id = entry["id"]
+                update_data = {k: v for k, v in entry.items() if k != "id"}
+                db.table_update('compresults', update_data, id=entry_id)
 
         st.success(f"Berechnen abgeschlossen. {updated} Einträge für {selected_year} aktualisiert.")
 
@@ -2425,12 +2300,12 @@ def piste_refpoint_wettkampf_analyse():
         if ref_col not in df.columns:
             st.error(f"Spalte {ref_col} nicht gefunden!")
         else:
-            competitions = supabase.table('competitions').select('Name, PisteYear').execute().data
+            competitions = db.table_select('competitions', 'Name, PisteYear')
             comp_map = {c['Name']: c.get('PisteYear') for c in competitions}
             df["PisteYear"] = df["Competition"].map(comp_map)
-            athletes = supabase.table('athletes').select('first_name, last_name, vintage').execute().data
+            athletes = db.table_select('athletes', 'first_name, last_name, vintage')
             athlete_vintage = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a['vintage'] for a in athletes}
-            pisterefcomppoints = supabase.table('pisterefcomppoints').select('*').execute().data
+            pisterefcomppoints = db.table_select('pisterefcomppoints', '*')
             pisterefcomppoints_df = pd.DataFrame(pisterefcomppoints)
 
             # Altersberechnung
@@ -2537,11 +2412,11 @@ def piste_refpoint_wettkampf_analyse():
                 except Exception:
                     pointsaverageref = None
                 data["pointsaverageref%"] = pointsaverageref
-                supabase.table("pisterefcompresults").delete()\
-                    .eq("first_name", data["first_name"])\
-                    .eq("last_name", data["last_name"])\
-                    .eq("PisteYear", data["PisteYear"]).execute()
-                supabase.table("pisterefcompresults").insert(data).execute()
+                db.table_delete('pisterefcompresults',
+                    first_name=data["first_name"],
+                    last_name=data["last_name"],
+                    PisteYear=data["PisteYear"])
+                db.table_insert("pisterefcompresults", data)
                 inserted += 1
             st.success(f"Top3-Auswertung abgeschlossen. {inserted} Einträge für {selected_year} gespeichert.")
 
@@ -2576,18 +2451,17 @@ def piste_refpoint_wettkampf_analyse():
                         performance = round(((this_val - prev_avg) / prev_avg) * 100, 1)
                 except Exception:
                     performance = None
-                supabase.table("pisterefcompresults").update({
-                    "performance": performance
-                }).eq("first_name", this_year_row.iloc[0]["first_name"])\
-                  .eq("last_name", this_year_row.iloc[0]["last_name"])\
-                  .eq("PisteYear", int(selected_year)).execute()
+                db.table_update('pisterefcompresults', {"performance": performance},
+                    first_name=this_year_row.iloc[0]["first_name"],
+                    last_name=this_year_row.iloc[0]["last_name"],
+                    PisteYear=int(selected_year))
                 updated += 1
 
             # DiveQuality-Berechnung
-            refcomppoints = supabase.table("pisterefcomppoints").select("*").execute().data
+            refcomppoints = db.table_select("pisterefcomppoints", '*')
             refcomppoints_df = pd.DataFrame(refcomppoints)
             compresults = fetch_all_rows('compresults', select='*')
-            competitions = supabase.table("competitions").select("Name, PisteYear").execute().data
+            competitions = db.table_select("competitions", "Name, PisteYear")
             compresults_df = pd.DataFrame(compresults)
             comp_map = {c["Name"]: c.get("PisteYear") for c in competitions}
             compresults_df["PisteYear"] = compresults_df["Competition"].map(comp_map)
@@ -2639,11 +2513,10 @@ def piste_refpoint_wettkampf_analyse():
                     except Exception:
                         continue
                 quality = round(sum(quality_vals) / len(quality_vals), 1) if quality_vals else None
-                supabase.table("pisterefcompresults").update({
-                    "quality": quality
-                }).eq("first_name", this_year_row.iloc[0]["first_name"])\
-                  .eq("last_name", this_year_row.iloc[0]["last_name"])\
-                  .eq("PisteYear", int(selected_year)).execute()
+                db.table_update('pisterefcompresults', {"quality": quality},
+                    first_name=this_year_row.iloc[0]["first_name"],
+                    last_name=this_year_row.iloc[0]["last_name"],
+                    PisteYear=int(selected_year))
             st.success(f"Entwicklung für {updated} Personen berechnet und gespeichert.")
 
 def show_top3_wettkaempfe():
@@ -2739,7 +2612,7 @@ def manage_tool_environment():
     st.header("🛠️ Tool Environment Werte eingeben oder importieren")
 
     # Athleten laden
-    athletes = supabase.table('athletes').select('first_name, last_name, birthdate').execute().data
+    athletes = db.table_select('athletes', 'first_name, last_name, birthdate')
     athlete_names = [f"{a['first_name']} {a['last_name']}" for a in athletes]
     athlete_lookup = {(a['first_name'], a['last_name']): a for a in athletes}
 
@@ -2769,11 +2642,11 @@ def manage_tool_environment():
                 "PisteYear": pisteyear,
                 "Category": category
             }
-            existing = supabase.table("socadditionalvalues").select("first_name").eq("first_name", first_name).eq("last_name", last_name).eq("PisteYear", pisteyear).execute().data
+            existing = db.table_select("socadditionalvalues", "first_name", first_name=first_name, last_name=last_name, PisteYear=pisteyear)
             if existing:
-                supabase.table("socadditionalvalues").update(data).eq("first_name", first_name).eq("last_name", last_name).eq("PisteYear", pisteyear).execute()
+                db.table_update("socadditionalvalues", data, first_name=first_name, last_name=last_name, PisteYear=pisteyear)
             else:
-                supabase.table("socadditionalvalues").insert(data).execute()
+                db.table_insert("socadditionalvalues", data)
             st.success("Wert gespeichert!")
 
     st.markdown("---")
@@ -2799,7 +2672,7 @@ def manage_tool_environment():
             inserted = 0
             skipped = []
             # Athleten-Liste für Lookup laden
-            athletes_db = supabase.table('athletes').select('first_name, last_name, birthdate').execute().data
+            athletes_db = db.table_select('athletes', 'first_name, last_name, birthdate')
             for _, row in df.iterrows():
                 found = any(
                     (str(row['first_name']).strip().lower() == a['first_name'].strip().lower() and
@@ -2818,11 +2691,11 @@ def manage_tool_environment():
                         "PisteYear": int(row["PisteYear"]),
                         "toolenvvalue": int(row["toolenvvalue"])
                     }
-                    existing = supabase.table("pisteenvironment").select("first_name").eq("first_name", row["first_name"]).eq("last_name", row["last_name"]).eq("PisteYear", row["PisteYear"]).execute().data
+                    existing = db.table_select("pisteenvironment", "first_name", first_name=row["first_name"], last_name=row["last_name"], PisteYear=row["PisteYear"])
                     if existing:
-                        supabase.table("pisteenvironment").update(data).eq("first_name", row["first_name"]).eq("last_name", row["last_name"]).eq("PisteYear", row["PisteYear"]).execute()
+                        db.table_update("pisteenvironment", data, first_name=row["first_name"], last_name=row["last_name"], PisteYear=row["PisteYear"])
                     else:
-                        supabase.table("pisteenvironment").insert(data).execute()
+                        db.table_insert("pisteenvironment", data)
                     inserted += 1
                 except Exception as e:
                     st.warning(f"Fehler bei {row['first_name']} {row['last_name']}: {e}")
@@ -2835,7 +2708,7 @@ def bio_mirwald():
     st.header("🧬 Bio Mirwald Eingabe & Import")
 
     # --- Einzel-Eingabe ---
-    athletes = supabase.table('athletes').select('first_name, last_name').execute().data
+    athletes = db.table_select('athletes', 'first_name, last_name')
     athlete_names = [f"{a['first_name']} {a['last_name']}" for a in athletes]
     athlete_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a for a in athletes}
 
@@ -2846,12 +2719,12 @@ def bio_mirwald():
 
     if st.button("Speichern"):
         first_name, last_name = selected_name.split(" ", 1)
-        supabase.table("pistemirwald").insert({
+        db.table_insert("pistemirwald", {
             "first_name": first_name,
             "last_name": last_name,
             "PisteYear": int(pisteyear),
             "bioentwstand": int(bioentwstand)
-        }).execute()
+        })
         st.success(f"Eintrag für {selected_name} gespeichert.")
 
     st.markdown("---")
@@ -2887,12 +2760,12 @@ def bio_mirwald():
                 missing_athletes.append({"first_name": row['first_name'], "last_name": row['last_name']})
                 continue
             try:
-                supabase.table("pistemirwald").insert({
+                db.table_insert("pistemirwald", {
                     "first_name": row['first_name'],
                     "last_name": row['last_name'],
                     "PisteYear": int(row['PisteYear']),
                     "bioentwstand": int(row['bioentwstand'])
-                }).execute()
+                })
                 inserted += 1
             except Exception as e:
                 st.warning(f"Fehler beim Einfügen von {row['first_name']} {row['last_name']}: {e}")
@@ -2906,7 +2779,7 @@ def manage_trainingsperformance_resilienz():
     st.header("💪 Trainingsperformance - Resilienz")
 
     # Athleten laden
-    athletes = supabase.table('athletes').select('first_name, last_name').execute().data
+    athletes = db.table_select('athletes', 'first_name, last_name')
     athlete_names = [f"{a['first_name']} {a['last_name']}" for a in athletes]
     athlete_lookup = {(a['first_name'], a['last_name']): a for a in athletes}
 
@@ -2940,11 +2813,11 @@ def manage_trainingsperformance_resilienz():
                 "trainingtime": trainingtime,
                 "trainingsince": trainingsince
             }
-            existing = supabase.table("trainingsperformance").select("first_name").eq("first_name", first_name).eq("last_name", last_name).eq("PisteYear", pisteyear).execute().data
+            existing = db.table_select("trainingsperformance", "first_name", first_name=first_name, last_name=last_name, PisteYear=pisteyear)
             if existing:
-                supabase.table("trainingsperformance").update(data).eq("first_name", first_name).eq("last_name", last_name).eq("PisteYear", pisteyear).execute()
+                db.table_update("trainingsperformance", data, first_name=first_name, last_name=last_name, PisteYear=pisteyear)
             else:
-                supabase.table("trainingsperformance").insert(data).execute()
+                db.table_insert("trainingsperformance", data)
             # Summen berechnen und socadditionalvalues upsert
             trainingperf = sum([q2, q3, q4, q5, q7, q8, q9, q10])
             resilience = q1 + q6
@@ -2965,11 +2838,11 @@ def manage_trainingsperformance_resilienz():
                 "trainingtime": trainingstime_value,
                 "Category": category
             }
-            existing2 = supabase.table("socadditionalvalues").select("first_name").eq("first_name", first_name).eq("last_name", last_name).eq("PisteYear", pisteyear).execute().data
+            existing2 = db.table_select("socadditionalvalues", "first_name", first_name=first_name, last_name=last_name, PisteYear=pisteyear)
             if existing2:
-                supabase.table("socadditionalvalues").update(data2).eq("first_name", first_name).eq("last_name", last_name).eq("PisteYear", pisteyear).execute()
+                db.table_update("socadditionalvalues", data2, first_name=first_name, last_name=last_name, PisteYear=pisteyear)
             else:
-                supabase.table("socadditionalvalues").insert(data2).execute()
+                db.table_insert("socadditionalvalues", data2)
             st.success("Wert gespeichert!")
 
     st.markdown("---")
@@ -3011,7 +2884,7 @@ def manage_trainingsperformance_resilienz():
         inserted = 0
         skipped = []
         # Athleten-Liste für Lookup laden
-        athletes_db = supabase.table('athletes').select('first_name, last_name, birthdate').execute().data
+        athletes_db = db.table_select('athletes', 'first_name, last_name, birthdate')
         athlete_lookup_full = {
             (a['first_name'].strip().lower(), a['last_name'].strip().lower(), str(a['birthdate'])): a
             for a in athletes_db
@@ -3030,11 +2903,11 @@ def manage_trainingsperformance_resilienz():
                 continue
             try:
                 data = {col: row[col] for col in required_cols}
-                existing = supabase.table("trainingsperformance").select("first_name").eq("first_name", row["first_name"]).eq("last_name", row["last_name"]).eq("PisteYear", row["PisteYear"]).execute().data
+                existing = db.table_select("trainingsperformance", "first_name", first_name=row["first_name"], last_name=row["last_name"], PisteYear=row["PisteYear"])
                 if existing:
-                    supabase.table("trainingsperformance").update(data).eq("first_name", row["first_name"]).eq("last_name", row["last_name"]).eq("PisteYear", row["PisteYear"]).execute()
+                    db.table_update("trainingsperformance", data, first_name=row["first_name"], last_name=row["last_name"], PisteYear=row["PisteYear"])
                 else:
-                    supabase.table("trainingsperformance").insert(data).execute()
+                    db.table_insert("trainingsperformance", data)
 
                 inserted += 1
             except Exception as e:
@@ -3045,8 +2918,7 @@ def manage_trainingsperformance_resilienz():
             st.dataframe(pd.DataFrame(skipped))
 
 def get_trainingsince_value(pisteyear, trainingsince, first_name, last_name):
-    # Athletendaten laden
-    athlete = supabase.table('athletes').select('vintage').eq('first_name', first_name).eq('last_name', last_name).execute().data
+    athlete = db.table_select('athletes', 'vintage', first_name=first_name, last_name=last_name)
     if not athlete:
         return None
     vintage = athlete[0]['vintage']
@@ -3056,8 +2928,7 @@ def get_trainingsince_value(pisteyear, trainingsince, first_name, last_name):
     except Exception:
         return None
 
-    # Wert aus pistereftrainingsince holen
-    ref = supabase.table('pistereftrainingsince').select('*').eq('age', age).execute().data
+    ref = db.table_select('pistereftrainingsince', '*', age=age)
     if not ref:
         return None
     ref_row = ref[0]
@@ -3067,8 +2938,7 @@ def get_trainingsince_value(pisteyear, trainingsince, first_name, last_name):
     return None
 
 def get_trainingstime_value(pisteyear, trainingstime, first_name, last_name):
-    # Athletendaten laden
-    athlete = supabase.table('athletes').select('vintage').eq('first_name', first_name).eq('last_name', last_name).execute().data
+    athlete = db.table_select('athletes', 'vintage', first_name=first_name, last_name=last_name)
     if not athlete:
         return None
     vintage = athlete[0]['vintage']
@@ -3078,8 +2948,7 @@ def get_trainingstime_value(pisteyear, trainingstime, first_name, last_name):
     except Exception:
         return None
 
-    # Wert aus pistereftrainingtime holen
-    ref = supabase.table('pistereftrainingtime').select('*').eq('age', age).execute().data
+    ref = db.table_select('pistereftrainingtime', '*', age=age)
     if not ref:
         return None
     ref_row = ref[0]
@@ -3090,19 +2959,19 @@ def get_trainingstime_value(pisteyear, trainingstime, first_name, last_name):
 
 def soc_full_calculation():
     st.header("🔢 SOC Full Calculation")
-    agecategories = supabase.table('agecategories').select('*').execute().data
+    agecategories = db.table_select('agecategories', '*')
     years = [str(y) for y in range(2024, 2031)]
     selected_year = st.selectbox("PisteYear wählen", years)
     if st.button("SOC Full Calculation starten"):
         pisteyear = int(selected_year)
 
-        athletes = supabase.table('athletes').select('id, first_name, last_name, birthdate, sex, vintage, bioage').execute().data
+        athletes = db.table_select('athletes', 'id, first_name, last_name, birthdate, sex, vintage, bioage')
         athletes_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a for a in athletes}
 
         refcompresults = fetch_all_rows('pisterefcompresults', select='*', PisteYear=pisteyear)
         refcompresults_df = pd.DataFrame(refcompresults)
 
-        pistedisciplines = supabase.table('pistedisciplines').select('id, name').execute().data
+        pistedisciplines = db.table_select('pistedisciplines', 'id, name')
         comp_perf_id = next((d['id'] for d in pistedisciplines if d['name'] == "CompPerfPointsCalc"), None)
         comp_quality_id = next((d['id'] for d in pistedisciplines if d['name'] == "CompPerfQualityCalc"), None)
         comp_enhance_id = next((d['id'] for d in pistedisciplines if d['name'] == "CompPerfEnhance"), None)
@@ -3149,7 +3018,7 @@ def soc_full_calculation():
             bioagevalue = bioage_map.get(str(bioage).lower(), 0) if bioage else 0
             athlete_data_map[key]["bioagevalue"] = bioagevalue
 
-            mirwald_rows = supabase.table("pistemirwald").select("bioentwstand").eq("first_name", athlete['first_name']).eq("last_name", athlete['last_name']).eq("PisteYear", pisteyear).execute().data
+            mirwald_rows = db.table_select("pistemirwald", "bioentwstand", first_name=athlete['first_name'], last_name=athlete['last_name'], PisteYear=pisteyear)
             mirwald_map = {3: 1, 2: 0, 1: -1}
             mirwaldvalue = 0
             if mirwald_rows and "bioentwstand" in mirwald_rows[0]:
@@ -3160,14 +3029,14 @@ def soc_full_calculation():
                     mirwaldvalue = 0
             athlete_data_map[key]["mirwaldvalue"] = mirwaldvalue
 
-            env_row = supabase.table("pisteenvironment").select("toolenvvalue").eq("first_name", athlete['first_name']).eq("last_name", athlete['last_name']).eq("PisteYear", pisteyear).execute().data
+            env_row = db.table_select("pisteenvironment", "toolenvvalue", first_name=athlete['first_name'], last_name=athlete['last_name'], PisteYear=pisteyear)
             if env_row:
                 athlete_data_map[key]["toolenvironment"] = env_row[0].get("toolenvvalue")
 
-            trainings_row = supabase.table("trainingsperformance").select("*")\
-                .eq("first_name", athlete['first_name'])\
-                .eq("last_name", athlete['last_name'])\
-                .eq("PisteYear", pisteyear).execute().data
+            trainings_row = db.table_select("trainingsperformance", '*',
+                first_name=athlete['first_name'],
+                last_name=athlete['last_name'],
+                PisteYear=pisteyear)
             if trainings_row:
                 t = trainings_row[0]
                 athlete_data_map[key]["trainingperf"] = sum([t.get("q2", 0), t.get("q3", 0), t.get("q4", 0), t.get("q5", 0), t.get("q7", 0), t.get("q8", 0), t.get("q9", 0), t.get("q10", 0)])
@@ -3212,10 +3081,10 @@ def soc_full_calculation():
             if not piste_result.empty:
                 raw_val = piste_result.iloc[0]['raw_result']
                 if raw_val is not None:
-                    supabase.table("pisteresults").update({"points": raw_val})\
-                        .eq("athlete_id", athlete['id'])\
-                        .eq("discipline_id", pistepointsdurchschnitt_id)\
-                        .eq("TestYear", pisteyear).execute()
+                    db.table_update("pisteresults", {"points": raw_val},
+                        athlete_id=athlete['id'],
+                        discipline_id=pistepointsdurchschnitt_id,
+                        TestYear=pisteyear)
                     piste_results_df.loc[
                         (piste_results_df['athlete_id'].astype(str) == str(athlete['id'])) &
                         (piste_results_df['discipline_id'].astype(str) == str(pistepointsdurchschnitt_id)) &
@@ -3273,7 +3142,7 @@ def soc_full_calculation():
                     pass
                 athlete_data_map[key]["quality"] = note_quality
 
-        competitions = supabase.table('competitions').select('Name, PisteYear').eq('PisteYear', pisteyear).execute().data
+        competitions = db.table_select('competitions', 'Name, PisteYear', PisteYear=pisteyear)
         comp_names = set(c['Name'] for c in competitions)
         compresults = fetch_all_rows('compresults', select='first_name, last_name, Competition, NationalTeam')
         for key in athlete_data_map:
@@ -3314,12 +3183,12 @@ def soc_full_calculation():
             batch = updates[i:i+batch_size]
             for action, data in batch:
                 if action == "update":
-                    supabase.table("socadditionalvalues").update(data)\
-                        .eq("first_name", data['first_name'])\
-                        .eq("last_name", data['last_name'])\
-                        .eq("PisteYear", data['PisteYear']).execute()
+                    db.table_update("socadditionalvalues", data,
+                        first_name=data['first_name'],
+                        last_name=data['last_name'],
+                        PisteYear=data['PisteYear'])
                 else:
-                    supabase.table("socadditionalvalues").insert(data).execute()
+                    db.table_insert("socadditionalvalues", data)
 
         # --- totalpoints berechnen und speichern ---
         fields = [
@@ -3327,10 +3196,10 @@ def soc_full_calculation():
             "resilience", "trainingtime", "trainingsince", "toolenvironment", "quality", "bioagevalue", "mirwaldvalue"
         ]
         for key, data in athlete_data_map.items():
-            existing = supabase.table("socadditionalvalues").select("*")\
-                .eq("first_name", data['first_name'])\
-                .eq("last_name", data['last_name'])\
-                .eq("PisteYear", data['PisteYear']).execute().data
+            existing = db.table_select("socadditionalvalues", '*',
+                first_name=data['first_name'],
+                last_name=data['last_name'],
+                PisteYear=data['PisteYear'])
             if existing:
                 row_vals = existing[0]
                 total = 0
@@ -3341,20 +3210,20 @@ def soc_full_calculation():
                             total += float(val)
                     except Exception:
                         continue
-                supabase.table("socadditionalvalues").update({"totalpoints": total})\
-                    .eq("first_name", data['first_name'])\
-                    .eq("last_name", data['last_name'])\
-                    .eq("PisteYear", data['PisteYear']).execute()
+                db.table_update("socadditionalvalues", {"totalpoints": total},
+                    first_name=data['first_name'],
+                    last_name=data['last_name'],
+                    PisteYear=data['PisteYear'])
 
         # --- pisterefminpoints-Check: pisteminregio und pisteminnational setzen ---
-        refminpoints = supabase.table("pisterefminpoints").select("*").execute().data
+        refminpoints = db.table_select("pisterefminpoints", '*')
         refminpoints_df = pd.DataFrame(refminpoints)
 
         for key, data in athlete_data_map.items():
-            row = supabase.table("socadditionalvalues").select("totalpoints", "birthdate", "PisteYear")\
-                .eq("first_name", data['first_name'])\
-                .eq("last_name", data['last_name'])\
-                .eq("PisteYear", data['PisteYear']).execute().data
+            row = db.table_select("socadditionalvalues", "totalpoints, birthdate, PisteYear",
+                first_name=data['first_name'],
+                last_name=data['last_name'],
+                PisteYear=data['PisteYear'])
             if not row or row[0].get("totalpoints") in (None, "", "nan"):
                 continue
             totalpoints = float(row[0]["totalpoints"])
@@ -3382,20 +3251,20 @@ def soc_full_calculation():
             pisteminregio = "Yes" if totalpoints >= regio_min else "No"
             pisteminnational = "Yes" if totalpoints >= national_min else "No"
 
-            supabase.table("socadditionalvalues").update({
+            db.table_update("socadditionalvalues", {
                 "pisteminregio": pisteminregio,
                 "pisteminnational": pisteminnational
-            }).eq("first_name", data['first_name'])\
-              .eq("last_name", data['last_name'])\
-              .eq("PisteYear", data['PisteYear']).execute()
+            }, first_name=data['first_name'],
+               last_name=data['last_name'],
+               PisteYear=data['PisteYear'])
 
         # --- Talentcard berechnen und speichern ---
         for key, data in athlete_data_map.items():
-            row = supabase.table("socadditionalvalues").select(
-                "pisteminregio", "pisteminnational", "CompPointsNationalTeam", "CompPointsRegionalTeam"
-            ).eq("first_name", data['first_name'])\
-            .eq("last_name", data['last_name'])\
-            .eq("PisteYear", data['PisteYear']).execute().data
+            row = db.table_select("socadditionalvalues",
+                "pisteminregio, pisteminnational, CompPointsNationalTeam, CompPointsRegionalTeam",
+                first_name=data['first_name'],
+                last_name=data['last_name'],
+                PisteYear=data['PisteYear'])
 
             if not row:
                 continue
@@ -3412,11 +3281,10 @@ def soc_full_calculation():
             else:
                 talentcard = "noCard"
 
-            supabase.table("socadditionalvalues").update({
-                "talentcard": talentcard
-            }).eq("first_name", data['first_name'])\
-            .eq("last_name", data['last_name'])\
-            .eq("PisteYear", data['PisteYear']).execute()
+            db.table_update("socadditionalvalues", {"talentcard": talentcard},
+                first_name=data['first_name'],
+                last_name=data['last_name'],
+                PisteYear=data['PisteYear'])
 
         st.success(f"Berechnung abgeschlossen und alle Einträge für {selected_year} aktualisiert.")
 
@@ -3493,6 +3361,8 @@ def show_full_piste_results_soc():
     # --- Grafik: Kurve und Durchschnittswert für Totalpunkte ---
     if not filtered.empty and "totalpoints" in filtered.columns:
         df_plot = filtered.copy()
+        df_plot["totalpoints"] = pd.to_numeric(df_plot["totalpoints"], errors="coerce")
+        df_plot = df_plot.dropna(subset=["totalpoints"])
         df_plot = df_plot.sort_values("totalpoints", ascending=True).reset_index(drop=True)
         import matplotlib.pyplot as plt
 
@@ -3691,7 +3561,7 @@ def show_big_comp_import():
                 continue
             # Insert
             try:
-                supabase.table("compresultsbig").insert({
+                db.table_insert("compresultsbig", {
                     "competition": row["competition"],
                     "year": int(row["year"]),
                     "discipline": row["discipline"],
@@ -3699,7 +3569,7 @@ def show_big_comp_import():
                     "sex": row["sex"],
                     "rank": str(row["rank"]),
                     "points": float(row["points"])
-                }).execute()
+                })
                 inserted += 1
                 existing_keys.add(key)
             except Exception as e:
@@ -3767,21 +3637,7 @@ def selektionen_wettkaempfe():
     competitions = fetch_all_rows('competitions', select='Name, PisteYear')
     comp_year_map = {c['Name']: c.get('PisteYear') for c in competitions if c.get('Name')}
 
-    # Alle compresults in Blöcken laden
-    def fetch_all_compresults():
-        all_rows = []
-        offset = 0
-        while True:
-            rows = supabase.table('compresults').select('*').range(offset, offset + 999).execute().data
-            if not rows:
-                break
-            all_rows.extend(rows)
-            if len(rows) < 1000:
-                break
-            offset += 1000
-        return all_rows
-
-    compresults = fetch_all_compresults()
+    compresults = db.table_select('compresults', '*')
 
     # Schneller: Jahre aus compresults + Mapping
     years = sorted(
@@ -4051,7 +3907,7 @@ def athleten_eingeben():
     birthdate = st.date_input("Geburtsdatum", min_value=datetime.date(1920, 1, 1), max_value=datetime.date.today())
     sex = st.selectbox("Geschlecht", ["male", "female"])
 
-    teams = supabase.table('team').select('FullName,ShortName').execute().data
+    teams = db.table_select('team', 'FullName, ShortName')
     club_options = [t['FullName'] for t in teams if t.get('FullName')]
     club = st.selectbox("Verein", club_options)
 
@@ -4065,13 +3921,14 @@ def athleten_eingeben():
 
     if st.button("Athlet speichern"):
         # Prüfen, ob Athlet bereits existiert
-        existing = supabase.table('athletes').select('id').eq('first_name', first_name.strip())\
-            .eq('last_name', last_name.strip())\
-            .eq('birthdate', birthdate.strftime('%Y-%m-%d')).execute().data
+        existing = db.table_select('athletes', 'id',
+            first_name=first_name.strip(),
+            last_name=last_name.strip(),
+            birthdate=birthdate.strftime('%Y-%m-%d'))
         if existing:
             st.error(f"Athlet {full_name} mit Geburtsdatum {birthdate.strftime('%Y-%m-%d')} existiert bereits!")
         else:
-            supabase.table('athletes').insert({
+            db.table_insert('athletes', {
                 'first_name': first_name,
                 'last_name': last_name,
                 'birthdate': birthdate.strftime('%Y-%m-%d'),
@@ -4082,7 +3939,7 @@ def athleten_eingeben():
                 'full_name': full_name,
                 'category': category,
                 'bioage': bioage
-            }).execute()
+            })
             st.success(f"Athlet {full_name} gespeichert!")
 
 def show_full_piste_results_clubs():
