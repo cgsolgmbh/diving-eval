@@ -79,6 +79,33 @@ def get_points(discipline_id, result, category, sex):
         pass
     return 0
 
+def get_points_with_next_higher(scoretable_rows, value):
+    """Return scoretable points for value; if no exact range matches, use next higher threshold."""
+    try:
+        v = float(value)
+    except Exception:
+        return None
+
+    next_higher = None
+    next_higher_min = None
+
+    for row in scoretable_rows or []:
+        try:
+            rmin = float(row['result_min'])
+            rmax = float(row['result_max'])
+            points = row.get('points')
+
+            if rmin <= v <= rmax:
+                return points
+
+            if rmin >= v and (next_higher_min is None or rmin < next_higher_min):
+                next_higher_min = rmin
+                next_higher = points
+        except Exception:
+            continue
+
+    return next_higher
+
 # --- LOGIN-MODUL ---
 if "user" not in st.session_state:
     st.session_state["user"] = None
@@ -1116,16 +1143,7 @@ def punkte_neuberechnen():
             # --- PisteTotalinPoints speichern (Bewertung des Durchschnitts) ---
             if pistetotalinpoints_id:
                 scoretable_rows = fetch_all_rows('scoretables', select='*', discipline_id=pistetotalinpoints_id)
-                pistetotalinpoints_value = None
-                for row in scoretable_rows:
-                    try:
-                        rmin = float(row['result_min'])
-                        rmax = float(row['result_max'])
-                        if rmin <= avg_points <= rmax:
-                            pistetotalinpoints_value = row['points']
-                            break
-                    except Exception:
-                        continue
+                pistetotalinpoints_value = get_points_with_next_higher(scoretable_rows, avg_points)
 
                 existing_totalin = fetch_all_rows(
                     'pisteresults',
@@ -3121,15 +3139,7 @@ def soc_full_calculation():
             if not piste_result.empty:
                 avg_points = piste_result.iloc[0]['points']
                 avg_points_rounded = round(float(avg_points), 1)
-                for row_score in scoretable_rows:
-                    try:
-                        rmin = float(row_score['result_min'])
-                        rmax = float(row_score['result_max'])
-                        if rmin <= avg_points_rounded <= rmax:
-                            piste_value = row_score['points']
-                            break
-                    except Exception:
-                        continue
+                piste_value = get_points_with_next_higher(scoretable_rows, avg_points_rounded)
             athlete_data_map[key]["piste"] = piste_value
 
             performance = row.get('performance')
