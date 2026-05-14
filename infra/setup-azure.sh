@@ -44,6 +44,9 @@ SQL_SERVER_NAME="sql-${ORG}-${WORKLOAD}-${ENV}"
 SQL_DB_NAME="sqldb-${WORKLOAD}-${ENV}"
 SQL_ADMIN_USER="sqladmin"
 SQL_ADMIN_PASSWORD="${SQL_ADMIN_PASSWORD:-}"
+ADMIN_LOGIN_PASSWORD="${ADMIN_LOGIN_PASSWORD:-}"
+ALLOWED_LOGIN_EMAILS="${ALLOWED_LOGIN_EMAILS:-chris@greuters.com,christian.greuter@outlook.com,christian.greuter@cgsol.ch,christian.greuter@swiss-aquatics.ch,christian.finger@swiss-aquatics.ch}"
+ADMIN_ENTRA_GROUP_IDS="${ADMIN_ENTRA_GROUP_IDS:-}"
 KEYVAULT_NAME="kv-${ORG}-${WORKLOAD}-${ENV}"
 APP_PLAN_NAME="asp-${WORKLOAD}-${ENV}-${LOCATION_SHORT}"
 APP_NAME="app-${ORG}-${WORKLOAD}-${ENV}"
@@ -80,6 +83,13 @@ if [[ -z "$SQL_ADMIN_PASSWORD" ]]; then
   echo ""
   read -s -r -p "SQL admin password (min 12 chars, upper+lower+digit+special): " \
     SQL_ADMIN_PASSWORD
+  echo ""
+fi
+
+if [[ -z "$ADMIN_LOGIN_PASSWORD" ]]; then
+  echo ""
+  read -s -r -p "App login password (ADMIN_PASSWORD): " \
+    ADMIN_LOGIN_PASSWORD
   echo ""
 fi
 
@@ -188,6 +198,12 @@ az keyvault secret set \
 az keyvault secret set \
   --vault-name "$KEYVAULT_NAME" --name "SqlDatabase" \
   --value "$SQL_DB_NAME" --output none
+az keyvault secret set \
+  --vault-name "$KEYVAULT_NAME" --name "AdminLoginPassword" \
+  --value "$ADMIN_LOGIN_PASSWORD" --output none
+az keyvault secret set \
+  --vault-name "$KEYVAULT_NAME" --name "AllowedLoginEmails" \
+  --value "$ALLOWED_LOGIN_EMAILS" --output none
 success "Secrets stored in Key Vault"
 
 # ---------------------------------------------------------------------------
@@ -229,6 +245,9 @@ az webapp config appsettings set \
   --resource-group "$RG_NAME" \
   --settings \
     SQL_CONNECTION_STRING="@Microsoft.KeyVault(VaultName=${KEYVAULT_NAME};SecretName=SqlConnectionString)" \
+    ADMIN_PASSWORD="@Microsoft.KeyVault(VaultName=${KEYVAULT_NAME};SecretName=AdminLoginPassword)" \
+    ALLOWED_LOGIN_EMAILS="@Microsoft.KeyVault(VaultName=${KEYVAULT_NAME};SecretName=AllowedLoginEmails)" \
+    ADMIN_ENTRA_GROUP_IDS="${ADMIN_ENTRA_GROUP_IDS}" \
     SCM_DO_BUILD_DURING_DEPLOYMENT=true \
     WEBSITES_PORT=8000 \
   --output none

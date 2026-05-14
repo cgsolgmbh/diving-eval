@@ -9,7 +9,10 @@
 # =============================================================================
 
 param(
-    [string]$SqlAdminPassword = ""
+    [string]$SqlAdminPassword = "",
+    [string]$AdminLoginPassword = "",
+    [string]$AllowedLoginEmails = "chris@greuters.com,christian.greuter@outlook.com,christian.greuter@cgsol.ch,christian.greuter@swiss-aquatics.ch,christian.finger@swiss-aquatics.ch",
+    [string]$AdminEntraGroupIds = ""
 )
 
 # "Continue" so az CLI warnings on stderr don't abort the script
@@ -68,6 +71,12 @@ if (-not $SqlAdminPassword) {
     $SecurePassword = Read-Host "SQL admin password (min 12 chars, upper+lower+digit+special)" -AsSecureString
     $SqlAdminPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
         [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecurePassword))
+}
+
+if (-not $AdminLoginPassword) {
+    $SecureLoginPassword = Read-Host "App login password (ADMIN_PASSWORD)" -AsSecureString
+    $AdminLoginPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureLoginPassword))
 }
 
 # ---------------------------------------------------------------------------
@@ -210,6 +219,8 @@ az keyvault secret set --vault-name $KeyVaultName --name "SqlConnectionString" -
 az keyvault secret set --vault-name $KeyVaultName --name "SqlAdminPassword"    --value $SqlAdminPassword --output none
 az keyvault secret set --vault-name $KeyVaultName --name "SqlServerHost"       --value "$SqlServerName.database.windows.net" --output none
 az keyvault secret set --vault-name $KeyVaultName --name "SqlDatabase"         --value $SqlDbName --output none
+az keyvault secret set --vault-name $KeyVaultName --name "AdminLoginPassword" --value $AdminLoginPassword --output none
+az keyvault secret set --vault-name $KeyVaultName --name "AllowedLoginEmails" --value $AllowedLoginEmails --output none
 Write-Success "Secrets stored in Key Vault"
 
 # ---------------------------------------------------------------------------
@@ -259,6 +270,9 @@ az webapp config appsettings set `
     --resource-group $RgName `
     --settings `
         "SQL_CONNECTION_STRING=@Microsoft.KeyVault(VaultName=$KeyVaultName;SecretName=SqlConnectionString)" `
+        "ADMIN_PASSWORD=@Microsoft.KeyVault(VaultName=$KeyVaultName;SecretName=AdminLoginPassword)" `
+        "ALLOWED_LOGIN_EMAILS=@Microsoft.KeyVault(VaultName=$KeyVaultName;SecretName=AllowedLoginEmails)" `
+        "ADMIN_ENTRA_GROUP_IDS=$AdminEntraGroupIds" `
         "SCM_DO_BUILD_DURING_DEPLOYMENT=true" `
         "WEBSITES_PORT=8000" `
     --output none

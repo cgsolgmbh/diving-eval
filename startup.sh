@@ -6,7 +6,7 @@ IMPORT_LOG=/home/site/import.log
 if [ ! -f "$IMPORT_FLAG" ]; then
     (
         echo "=== IMPORT STARTED $(date) ===" > "$IMPORT_LOG"
-        python -u /home/site/wwwroot/sqltables/import_data.py >> "$IMPORT_LOG" 2>&1
+        python3 -u /home/site/wwwroot/sqltables/import_data.py >> "$IMPORT_LOG" 2>&1
         EXIT_CODE=$?
         echo "--- PYTHON DONE, exit=$EXIT_CODE ---" >> "$IMPORT_LOG"
         if [ $EXIT_CODE -eq 0 ]; then
@@ -30,9 +30,15 @@ cp /home/site/wwwroot/db.py "$APP_DIR/db.py" 2>/dev/null || true
 cp /home/site/wwwroot/app.py "$APP_DIR/app.py" 2>/dev/null || true
 
 echo "=== STARTUP $(date): APP_PY=$APP_PY ===" >> /home/site/startup_debug.log
-echo "DB_PY_USER=$(head -20 $APP_DIR/db.py | grep -c 'User ID')" >> /home/site/startup_debug.log
 
-exec python -m streamlit run "$APP_PY" \
+# Self-healing: install packages to user dir (/home/.local - persistent) if not already done
+if ! python3 -c "import streamlit" >/dev/null 2>&1; then
+    echo "Streamlit not found; installing requirements to user dir..." >> /home/site/startup_debug.log
+    python3 -m pip install --user --no-cache-dir -r /home/site/wwwroot/requirements.txt >> /home/site/startup_debug.log 2>&1
+    echo "Install done, exit=$?" >> /home/site/startup_debug.log
+fi
+
+exec python3 -m streamlit run "$APP_PY" \
     --server.port 8000 \
     --server.address 0.0.0.0 \
     --server.headless true \
