@@ -22,13 +22,18 @@ def _get_params():
         port = int(port.strip())
     else:
         server, port = server_raw, 1433
-    return {
+    result = {
         "server": server,
         "port": port,
         "user": parts.get("Uid", "") or parts.get("User ID", ""),
         "password": parts.get("Pwd", "") or parts.get("Password", ""),
         "database": parts.get("Database", ""),
     }
+    # DEBUG: Log connection params (mask password)
+    import sys
+    pwd_masked = (result["password"][:3] + "***" + result["password"][-2:]) if result["password"] else "NONE"
+    print(f"[DB_DEBUG] Connecting to {result['server']}:{result['port']} user={result['user']} db={result['database']} pwd_masked={pwd_masked}", file=sys.stderr)
+    return result
 
 
 def _open_conn():
@@ -36,8 +41,10 @@ def _open_conn():
     p = _get_params()
     last_exc = None
     max_attempts = 6
+    import sys
     for attempt in range(1, max_attempts + 1):
         try:
+            print(f"[DB_DEBUG] Connection attempt {attempt}/{max_attempts}...", file=sys.stderr)
             return pymssql.connect(
                 server=p["server"],
                 port=p["port"],
@@ -49,6 +56,7 @@ def _open_conn():
             )
         except (pymssql.OperationalError, pymssql.InterfaceError) as exc:
             last_exc = exc
+            print(f"[DB_DEBUG] Attempt {attempt} failed: {exc}", file=sys.stderr)
             if attempt < max_attempts:
                 try:
                     import streamlit as st
@@ -56,6 +64,7 @@ def _open_conn():
                 except Exception:
                     pass
                 time.sleep(20)
+    print(f"[DB_DEBUG] All {max_attempts} attempts failed. Final error: {last_exc}", file=sys.stderr)
     raise last_exc
 
 

@@ -30,6 +30,7 @@ cp /home/site/wwwroot/db.py "$APP_DIR/db.py" 2>/dev/null || true
 cp /home/site/wwwroot/app.py "$APP_DIR/app.py" 2>/dev/null || true
 
 echo "=== STARTUP $(date): APP_PY=$APP_PY ===" >> /home/site/startup_debug.log
+echo "ENV_SQL_CS=$([ -n "$SQL_CONNECTION_STRING" ] && echo 'SET' || echo 'MISSING')" >> /home/site/startup_debug.log
 
 # Self-healing: install packages to user dir (/home/.local - persistent) if not already done
 if ! python3 -c "import streamlit" >/dev/null 2>&1; then
