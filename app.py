@@ -767,7 +767,11 @@ def manage_results_entry():
 # Athleten bearbeiten
 def edit_athletes():
     st.header("✏️ Athleten bearbeiten")
-    athletes = db.table_select('athletes')
+    try:
+        athletes = db.table_select('athletes')
+    except Exception as e:
+        st.error(f"Athleten konnten nicht geladen werden: {e}")
+        return
     athlete_names = {f"{a['first_name']} {a['last_name']}": a['id'] for a in athletes}
     selected_name = st.selectbox("Athlet auswählen", list(athlete_names.keys()))
 
@@ -810,9 +814,13 @@ def auswertung_starten():
     st.header("📈 Piste Resultate anzeigen")
 
     # Daten laden (jetzt mit Caching und Utilitys)
-    results = fetch_all_rows("pisteresults", select="*")
-    athletes = get_athletes()
-    disciplines = get_pistedisciplines()
+    try:
+        results = fetch_all_rows("pisteresults", select="*")
+        athletes = get_athletes()
+        disciplines = get_pistedisciplines()
+    except Exception as e:
+        st.error(f"Piste Resultate konnten nicht geladen werden: {e}")
+        return
 
     # Lookup-Tabellen
     athlete_lookup = get_lookup_dict(athletes, "id", "full_name")
@@ -1457,6 +1465,23 @@ def bewertung_wettkampf():
                 (df_selection['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
                 (df_selection['category'].astype(str).str.strip().str.lower() == str(category).strip().lower())
             ]
+            if relevant_selection.empty:
+                missing_selection_combos.append({
+                    "sex": str(sex),
+                    "Discipline": str(discipline),
+                    "CategoryStart": str(category),
+                })
+
+            jem_qual = bool(comp_row.get("qual-JEM", False))
+            em_qual = bool(comp_row.get("qual-EM", False))
+            wm_qual = bool(comp_row.get("qual-WM", False))
+            regional_qual = bool(comp_row.get("qual-Regional", False))
+
+            excluded_synchro = (
+                str(category).strip().lower() in ["jugend c", "jugend d"] and
+                str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
+            )
+
             base_selection = relevant_selection
             if "year" in relevant_selection.columns:
                 by_piste = None
@@ -1483,11 +1508,19 @@ def bewertung_wettkampf():
             jem_qual = bool(comp_row.get("qual-JEM", False))
             em_qual = bool(comp_row.get("qual-EM", False))
             wm_qual = bool(comp_row.get("qual-WM", False))
+            regional_qual = bool(comp_row.get("qual-Regional", False))
 
-            jem, jem_pct, jem_nt = get_status(jem_row, jem_qual, points)
-            em, em_pct, em_nt = get_status(em_row, em_qual, points)
-            wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points)
+            try:
+                points_float = float(points)
+            except Exception:
+                points_float = None
 
+            if points_float is None:
+                continue
+
+            jem, jem_pct, jem_nt = get_status(jem_row, jem_qual, points_float)
+            em, em_pct, em_nt = get_status(em_row, em_qual, points_float)
+            wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points_float)
             nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
 
             # RegionalTeam-Berechnung
@@ -1508,7 +1541,6 @@ def bewertung_wettkampf():
                 str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
             )
 
-            regional_qual = bool(comp_row.get("qual-Regional", False))
             if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= REGIONAL_TEAM_MIN_PERCENT:
                 regionalteam = "yes"
 
@@ -1585,14 +1617,6 @@ def bewertung_wettkampf():
                 (df_selection['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
                 (df_selection['category'].astype(str).str.strip().str.lower() == str(category).strip().lower())
             ]
-
-            if relevant_selection.empty:
-                missing_selection_combos.append({
-                    "sex": str(sex),
-                    "Discipline": str(discipline),
-                    "CategoryStart": str(category),
-                })
-
             base_selection = relevant_selection
             if "year" in relevant_selection.columns:
                 by_piste = None
@@ -1623,16 +1647,11 @@ def bewertung_wettkampf():
             if relevant_selection.empty:
                 # already counted by missing_selection_combos
                 pass
-            elif regional_row.empty:
+            elif regional_qual and not excluded_synchro and regional_row.empty and jem_row.empty:
                 no_regional_ref_rows += 1
 
             if (not relevant_selection.empty) and jem_row.empty and em_row.empty and wm_row.empty and regional_row.empty:
                 no_threshold_rows += 1
-
-            jem_qual = bool(comp_row.get("qual-JEM", False))
-            em_qual = bool(comp_row.get("qual-EM", False))
-            wm_qual = bool(comp_row.get("qual-WM", False))
-            regional_qual = bool(comp_row.get("qual-Regional", False))
 
             try:
                 points_float = float(points)
@@ -1654,15 +1673,11 @@ def bewertung_wettkampf():
             if not regional_ref_row.empty and 'points' in regional_ref_row.columns:
                 try:
                     ref_val = safe_numeric(regional_ref_row.iloc[0].get('points'))
-                    percent = round((float(points_float) / float(ref_val)) * 100, 1) if ref_val else None
+                    points_val_local = safe_numeric(points)
+                    percent = round((float(points_val_local) / float(ref_val)) * 100, 1) if ref_val and points_val_local is not None else None
                     regional_pct = percent
                 except Exception:
                     pass
-
-            excluded_synchro = (
-                str(category).strip().lower() in ["jugend c", "jugend d"] and
-                str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
-            )
 
             if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= REGIONAL_TEAM_MIN_PERCENT:
                 regionalteam = "yes"
@@ -1687,7 +1702,7 @@ def bewertung_wettkampf():
             f"Diagnose: total in PisteYear={selected_pisteyear}: {total_in_year} | "
             f"ohne selectionpoints-Match: {len(missing_selection_combos)} | "
             f"selectionpoints vorhanden aber keine JEM/EM/WM/Regional-Zeile: {no_threshold_rows} | "
-            f"selectionpoints vorhanden aber keine Regional-Referenz: {no_regional_ref_rows}"
+            f"Regional qualifiziert (nicht Synchro C/D), aber ohne Regional- und ohne JEM-Referenz: {no_regional_ref_rows}"
         )
         if seen_regional_labels:
             st.info("Gefundene selectionpoints-Competition Labels für Regional: " + ", ".join(sorted(seen_regional_labels)))
@@ -1789,7 +1804,7 @@ def bewertung_wettkampf():
                     points_val_local = safe_numeric(points)
                     percent = round((float(points_val_local) / float(ref_val)) * 100, 1) if ref_val and points_val_local is not None else None
                     regional_pct = percent
-                except:
+                except Exception:
                     pass
 
             excluded_synchro = (
@@ -1916,7 +1931,7 @@ def auswertung_wettkampf():
 def manage_compresults_entry():
     st.header("🏅 Wettkampfresultate eingeben")
 
-    # --- Neuen Wettkampf anlegen ---
+    # --- Neuer Wettkampf anlegen ---
     if "show_new_comp_form" not in st.session_state:
         st.session_state["show_new_comp_form"] = False
 
@@ -2125,7 +2140,7 @@ def manage_compresults_entry():
             if x in (None, "", "nan"):
                 return None
             if isinstance(x, str):
-                s = x.strip().replace("%", "").replace(",", ".")
+                s = x.strip().replace("%", "").replace(",", ".").strip()
                 if s == "":
                     return None
                 return float(s)
@@ -2335,8 +2350,8 @@ def piste_refpoint_wettkampf_analyse():
                 continue
 
             ref_row = refpoints_df[
-                (refpoints_df["Discipline"].astype(str).str.lower() == str(discipline).lower()) &
-                (refpoints_df["sex"].astype(str).str.lower() == str(sex).lower())
+                (refpoints_df["Discipline"].astype(str).str.strip().str.lower() == str(discipline).lower()) &
+                (refpoints_df["sex"].astype(str).str.strip().str.lower() == str(sex).lower())
             ]
             if ref_row.empty or str(age) not in ref_row.columns:
                 continue
@@ -2389,8 +2404,8 @@ def piste_refpoint_wettkampf_analyse():
             if national_qual and not excluded_synchro_nat:
                 if category in ["jugend c", "jugend d"]:
                     ref_row_nt = refpoints_df[
-                        (refpoints_df["Discipline"].astype(str).str.lower() == discipline_lower) &
-                        (refpoints_df["sex"].astype(str).str.lower() == sex.strip().lower())
+                        (refpoints_df["Discipline"].astype(str).str.strip().str.lower() == discipline_lower) &
+                        (refpoints_df["sex"].astype(str).str.strip().str.lower() == sex.strip().lower())
                     ]
                     if not ref_row_nt.empty and str(age) in ref_row_nt.columns:
                         ref_value_nt = ref_row_nt.iloc[0][str(age)]
@@ -2402,10 +2417,10 @@ def piste_refpoint_wettkampf_analyse():
                             percent_nt = None
                 else:
                     sel_row_nt = sel_df[
-                        (sel_df["Competition"].astype(str).str.lower() == "jem") &
-                        (sel_df["category"].astype(str).str.lower() == category) &
-                        (sel_df["Discipline"].astype(str).str.lower() == discipline_lower) &
-                        (sel_df["sex"].astype(str).str.lower() == sex.strip().lower()) &
+                        (sel_df["Competition"].astype(str).str.strip().str.lower() == "jem") &
+                        (sel_df["category"].astype(str).str.strip().str.lower() == category) &
+                        (sel_df["Discipline"].astype(str).str.strip().str.lower() == discipline_lower) &
+                        (sel_df["sex"].astype(str).str.strip().str.lower() == sex.strip().lower()) &
                         (sel_df["year"].astype(str) == str(comp_year))
                     ]
                     if not sel_row_nt.empty:
@@ -2642,8 +2657,8 @@ def piste_refpoint_wettkampf_analyse():
                     if not (discipline and sex and avg_points and age):
                         continue
                     ref_row = refcomppoints_df[
-                        (refcomppoints_df["Discipline"].astype(str).str.lower() == str(discipline).lower()) &
-                        (refcomppoints_df["sex"].astype(str).str.lower() == str(sex).lower())
+                        (refcomppoints_df["Discipline"].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
+                        (refcomppoints_df["sex"].astype(str).str.strip().str.lower() == str(sex).strip().lower())
                     ]
                     quality_col = f"quality{int(age)}"
                     if ref_row.empty or quality_col not in ref_row.columns:
@@ -2669,7 +2684,7 @@ def show_top3_wettkaempfe():
 
     df = pd.DataFrame(fetch_all_rows("pisterefcompresults", select="*"))
     if df.empty:
-        st.info("Keine Top-3-Wettkampf-Daten vorhanden.")
+        st.info("Keine Top-3-Wettkämpfe für die Auswahl gefunden.")
         return
 
     jahre = sorted(df["PisteYear"].dropna().unique())
@@ -2759,7 +2774,7 @@ def manage_tool_environment():
     # Athleten laden
     athletes = db.table_select('athletes', 'first_name, last_name, birthdate')
     athlete_names = [f"{a['first_name']} {a['last_name']}" for a in athletes]
-    athlete_lookup = {(a['first_name'], a['last_name']): a for a in athletes}
+    athlete_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a for a in athletes}
 
      # Manuelle Eingabe
     st.subheader("🔹 Einzelnen Wert eingeben")
@@ -2767,32 +2782,13 @@ def manage_tool_environment():
     selected_athlete = st.selectbox("Athlet auswählen", athlete_names)
     if selected_athlete:
         first_name, last_name = selected_athlete.split(" ", 1)
-        athlete = athlete_lookup.get((first_name, last_name))
-        birthdate = athlete['birthdate'] if athlete else ""
-        st.write(f"Geburtsdatum: **{birthdate}**")
-        toolenvironment = st.selectbox("Tool Environment Wert (1-5)", [1, 2, 3, 4, 5])
-
-        if st.button("💾 Wert speichern"):
-            # Kategorie berechnen
-            vintage = None
-            if athlete and athlete.get("birthdate"):
-                vintage = int(str(athlete["birthdate"])[:4])
-            category = get_category_from_testyear(vintage, pisteyear) if vintage else None
-
-            data = {
-                "first_name": first_name,
-                "last_name": last_name,
-                "birthdate": birthdate,
-                "toolenvironment": toolenvironment,
-                "PisteYear": pisteyear,
-                "Category": category
-            }
-            existing = db.table_select("socadditionalvalues", "first_name", first_name=first_name, last_name=last_name, PisteYear=pisteyear)
-            if existing:
-                db.table_update("socadditionalvalues", data, first_name=first_name, last_name=last_name, PisteYear=pisteyear)
-            else:
-                db.table_insert("socadditionalvalues", data)
-            st.success("Wert gespeichert!")
+        db.table_insert("pistemirwald", {
+            "first_name": first_name,
+            "last_name": last_name,
+            "PisteYear": pisteyear,
+            "bioentwstand": 3
+        })
+        st.success(f"Eintrag für {selected_athlete} gespeichert.")
 
     st.markdown("---")
     st.subheader("🔹 CSV-Import")
@@ -2801,53 +2797,45 @@ def manage_tool_environment():
     example = pd.DataFrame([{
         "first_name": "Max",
         "last_name": "Mustermann",
-        "birthdate": "2005-03-15",
-        "toolenvvalue": 3,
-        "PisteYear": 2025
+        "PisteYear": 2024,
+        "bioentwstand": 3
     }])
-    st.download_button("📄 Beispiel-CSV herunterladen", example.to_csv(index=False).encode("utf-8"), file_name="tool_environment_beispiel.csv", mime="text/csv")
+    st.download_button(
+        label="📄 Beispiel-CSV herunterladen",
+        data=example.to_csv(index=False).encode("utf-8"),
+        file_name="tool_environment_beispiel.csv",
+        mime="text/csv"
+    )
 
     uploaded_file = st.file_uploader("CSV-Datei mit Tool Environment-Werten hochladen", type="csv")
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
-        required_cols = {"first_name", "last_name", "birthdate", "toolenvvalue", "PisteYear"}
-        if not required_cols.issubset(df.columns):
-            st.error(f"❌ Die Datei muss folgende Spalten enthalten: {', '.join(required_cols)}")
-        else:
-            inserted = 0
-            skipped = []
-            # Athleten-Liste für Lookup laden
-            athletes_db = db.table_select('athletes', 'first_name, last_name, birthdate')
-            for _, row in df.iterrows():
-                found = any(
-                    (str(row['first_name']).strip().lower() == a['first_name'].strip().lower() and
-                    str(row['last_name']).strip().lower() == a['last_name'].strip().lower() and
-                    str(row.get('birthdate', '')).strip() == str(a['birthdate']))
-                    for a in athletes_db
-                )
-                if not found:
-                    skipped.append({"first_name": row["first_name"], "last_name": row["last_name"], "birthdate": row.get("birthdate", "")})
-                    continue
-                try:
-                    data = {
-                        "first_name": row["first_name"],
-                        "last_name": row["last_name"],
-                        "birthdate": row["birthdate"],
-                        "PisteYear": int(row["PisteYear"]),
-                        "toolenvvalue": int(row["toolenvvalue"])
-                    }
-                    existing = db.table_select("pisteenvironment", "first_name", first_name=row["first_name"], last_name=row["last_name"], PisteYear=row["PisteYear"])
-                    if existing:
-                        db.table_update("pisteenvironment", data, first_name=row["first_name"], last_name=row["last_name"], PisteYear=row["PisteYear"])
-                    else:
-                        db.table_insert("pisteenvironment", data)
-                    inserted += 1
-                except Exception as e:
-                    st.warning(f"Fehler bei {row['first_name']} {row['last_name']}: {e}")
-            st.success(f"✅ {inserted} Werte importiert.")
-            if skipped:
-                st.warning("Folgende Personen wurden nicht importiert, da sie nicht in der Athletenliste stehen:")
-                st.dataframe(pd.DataFrame(skipped))
+        required_columns = {"first_name", "last_name", "PisteYear", "bioentwstand"}
+        if not required_columns.issubset(df.columns):
+            st.error(f"❌ Die Datei muss folgende Spalten enthalten: {', '.join(required_columns)}")
+            return
+
+        missing_athletes = []
+        inserted = 0
+        for _, row in df.iterrows():
+            key = (str(row['first_name']).strip().lower(), str(row['last_name']).strip().lower())
+            if key not in athlete_lookup:
+                missing_athletes.append({"first_name": row['first_name'], "last_name": row['last_name']})
+                continue
+            try:
+                db.table_insert("pistemirwald", {
+                    "first_name": row['first_name'],
+                    "last_name": row['last_name'],
+                    "PisteYear": int(row['PisteYear']),
+                    "bioentwstand": int(row['bioentwstand'])
+                })
+                inserted += 1
+            except Exception as e:
+                st.warning(f"Fehler beim Einfügen von {row['first_name']} {row['last_name']}: {e}")
+        st.success(f"{inserted} Einträge erfolgreich importiert.")
+        if missing_athletes:
+            st.warning(f"{len(missing_athletes)} Athlet(en) nicht gefunden:")
+            st.dataframe(pd.DataFrame(missing_athletes))
 
 def bio_mirwald():
     st.header("🧬 Bio Mirwald Eingabe & Import")
@@ -2867,8 +2855,8 @@ def bio_mirwald():
         db.table_insert("pistemirwald", {
             "first_name": first_name,
             "last_name": last_name,
-            "PisteYear": int(pisteyear),
-            "bioentwstand": int(bioentwstand)
+            "PisteYear": pisteyear,
+            "bioentwstand": bioentwstand
         })
         st.success(f"Eintrag für {selected_name} gespeichert.")
 
@@ -2883,7 +2871,7 @@ def bio_mirwald():
         "bioentwstand": 1
     }])
     st.download_button(
-        label="📄 Beispiel-CSV herunterladen",
+        "📄 Beispiel-CSV herunterladen",
         data=sample_df.to_csv(index=False).encode("utf-8"),
         file_name="bio_mirwald_beispiel.csv",
         mime="text/csv"
@@ -3030,19 +3018,23 @@ def manage_trainingsperformance_resilienz():
         skipped = []
         # Athleten-Liste für Lookup laden
         athletes_db = db.table_select('athletes', 'first_name, last_name, birthdate')
-        athlete_lookup_full = {
-            (a['first_name'].strip().lower(), a['last_name'].strip().lower(), str(a['birthdate'])): a
+        athlete_lookup_name = {
+            (a['first_name'].strip().lower(), a['last_name'].strip().lower()): a
             for a in athletes_db
         }
         for _, row in df.iterrows():
-            key = (str(row['first_name']).strip().lower(), str(row['last_name']).strip().lower(), str(row.get('birthdate', '')).strip())
-            # Prüfe, ob Athlet existiert (alle drei Felder müssen stimmen)
-            found = any(
-                (str(row['first_name']).strip().lower() == a['first_name'].strip().lower() and
-                str(row['last_name']).strip().lower() == a['last_name'].strip().lower() and
-                str(row.get('birthdate', '')).strip() == str(a['birthdate']))
-                for a in athletes_db
-            )
+            first = str(row['first_name']).strip().lower()
+            last = str(row['last_name']).strip().lower()
+            csv_birthdate = str(row.get('birthdate', '')).strip().split(' ')[0]
+
+            # Standardfall: Match über Vorname/Nachname (birthdate ist in required_cols nicht enthalten)
+            found = (first, last) in athlete_lookup_name
+
+            # Falls birthdate im CSV dennoch vorhanden ist, nur dann zusätzlich prüfen
+            if found and csv_birthdate:
+                athlete_birthdate = str(athlete_lookup_name[(first, last)].get('birthdate') or '').strip().split(' ')[0]
+                found = athlete_birthdate == csv_birthdate
+
             if not found:
                 skipped.append({"first_name": row["first_name"], "last_name": row["last_name"], "birthdate": row.get("birthdate", "")})
                 continue
@@ -3132,11 +3124,8 @@ def soc_full_calculation():
         piste_results = fetch_all_rows("pisteresults", select="athlete_id, discipline_id, points, raw_result, TestYear")
         piste_results_df = pd.DataFrame(piste_results)
 
-        existing_rows = fetch_all_rows("socadditionalvalues", select="*")
-        existing_lookup = {
-            (row['first_name'], row['last_name'], row['PisteYear']): row
-            for row in existing_rows
-        }
+        # Bestehende Einträge für dieses Jahr löschen → danach immer frisch inserieren (kein Duplikat-Risiko)
+        db.execute("DELETE FROM [socadditionalvalues] WHERE [PisteYear] = %s", [pisteyear])
 
         athlete_data_map = {}
 
@@ -3306,30 +3295,9 @@ def soc_full_calculation():
             ]
             athlete_data_map[key]["CompPointsRegionalTeam"] = "yes" if relevant_results_regio else "no"
 
-        # --- Jetzt alle Daten in socadditionalvalues schreiben (Batch) ---
-        max_id_row = db.query("SELECT ISNULL(MAX(id), 0) AS max_id FROM [socadditionalvalues]")
-        next_id = (max_id_row[0]['max_id'] if max_id_row else 0) + 1
-        updates = []
-        for key, data in athlete_data_map.items():
-            existing = existing_lookup.get(key)
-            if existing:
-                updates.append(("update", data))
-            else:
-                data["id"] = next_id
-                next_id += 1
-                updates.append(("insert", data))
-
-        batch_size = 500
-        for i in range(0, len(updates), batch_size):
-            batch = updates[i:i+batch_size]
-            for action, data in batch:
-                if action == "update":
-                    db.table_update("socadditionalvalues", data,
-                        first_name=data['first_name'],
-                        last_name=data['last_name'],
-                        PisteYear=data['PisteYear'])
-                else:
-                    db.table_insert("socadditionalvalues", data)
+        # --- Alle berechneten Daten frisch einfügen ---
+        for data in athlete_data_map.values():
+            db.table_insert("socadditionalvalues", data)
 
         # --- totalpoints berechnen und speichern ---
         fields = [
@@ -3725,7 +3693,12 @@ def athleten_anzeigen():
     st.header("👥 Athleten anzeigen & exportieren")
 
     # Daten laden
-    df = pd.DataFrame(fetch_all_rows("athletes", select="*"))
+    try:
+        df = pd.DataFrame(fetch_all_rows("athletes", select="*"))
+    except Exception as e:
+        st.error(f"Athleten konnten nicht geladen werden: {e}")
+        return
+
     if df.empty:
         st.info("Keine Athleten gefunden.")
         return
@@ -3737,6 +3710,15 @@ def athleten_anzeigen():
             df[col] = None
     df = df[show_cols]
 
+    def _options(series):
+        values = (
+            series.dropna()
+            .astype(str)
+            .str.strip()
+        )
+        values = values[values != ""]
+        return sorted(values.unique().tolist())
+
     # Filter
     st.subheader("🔎 Filter")
     col1, col2, col3, col4 = st.columns(4)
@@ -3744,13 +3726,13 @@ def athleten_anzeigen():
         first_name = st.text_input("Vorname", "")
         last_name = st.text_input("Nachname", "")
     with col2:
-        club = st.selectbox("Verein", ["Alle"] + sorted(df["club"].dropna().unique().tolist()))
-        category = st.selectbox("Kategorie", ["Alle"] + sorted(df["category"].dropna().unique().tolist()))
+        club = st.selectbox("Verein", ["Alle"] + _options(df["club"]))
+        category = st.selectbox("Kategorie", ["Alle"] + _options(df["category"]))
     with col3:
-        sex = st.selectbox("Geschlecht", ["Alle"] + sorted(df["sex"].dropna().unique().tolist()))
-        nationalteam = st.selectbox("Nationalteam", ["Alle"] + sorted(df["nationalteam"].dropna().unique().tolist()))
+        sex = st.selectbox("Geschlecht", ["Alle"] + _options(df["sex"]))
+        nationalteam = st.selectbox("Nationalteam", ["Alle"] + _options(df["nationalteam"]))
     with col4:
-        vintage = st.selectbox("Jahrgang", ["Alle"] + sorted(df["vintage"].dropna().astype(str).unique().tolist()))
+        vintage = st.selectbox("Jahrgang", ["Alle"] + _options(df["vintage"]))
 
     filtered = df.copy()
     if first_name:
@@ -3950,7 +3932,7 @@ def referenztabellen_anzeigen():
     else:
         st.info("Disziplin 'PisteTotalinPoints' nicht gefunden.")
 
-# --- CompPerfEnhance (Leistungsentwicklung) ---
+    # --- CompPerfEnhance (Leistungsentwicklung) ---
     st.subheader("📈 Leistungsentwicklung (CompPerfEnhance)")
     comp_perf_enhance_id = None
     if not pistedisciplines.empty:
@@ -4199,10 +4181,10 @@ def main():
         "Athleten bearbeiten",
         "Athleten löschen",
         "Athleten anzeigen",
+        "Piste Mirwald",
+        "Piste Resultate anzeigen",
         "Piste Ergebnisse eingeben",
         "Piste Punkte neu berechnen",
-        "Piste Resultate anzeigen",
-        "Wettkampfresultate eingeben",
         "Wettkampfauswertungen",
         "Wettkampf-Bewertung",
         "Wettkaempfe Top 3",

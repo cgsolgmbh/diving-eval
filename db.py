@@ -2,15 +2,29 @@ import os
 import time
 import pymssql
 
+try:
+    import pyodbc
+except Exception:
+    pyodbc = None
+
+
+_DB_DRIVER = None
+
+
+def _get_connection_string():
+    cs = os.environ.get("SQL_CONNECTION_STRING")
+    if cs:
+        return cs.strip()
+
+    try:
+        import streamlit as st
+        return str(st.secrets["SQL_CONNECTION_STRING"]).strip()
+    except Exception:
+        raise RuntimeError("SQL_CONNECTION_STRING not set")
+
 
 def _get_params():
-    cs = os.environ.get("SQL_CONNECTION_STRING")
-    if not cs:
-        try:
-            import streamlit as st
-            cs = st.secrets["SQL_CONNECTION_STRING"]
-        except Exception:
-            raise RuntimeError("SQL_CONNECTION_STRING not set")
+    cs = _get_connection_string()
     parts = {}
     for part in cs.split(";"):
         if "=" in part:
@@ -22,59 +36,111 @@ def _get_params():
         port = int(port.strip())
     else:
         server, port = server_raw, 1433
-    result = {
+    return {
         "server": server,
         "port": port,
         "user": parts.get("Uid", "") or parts.get("User ID", ""),
         "password": parts.get("Pwd", "") or parts.get("Password", ""),
         "database": parts.get("Database", ""),
     }
-    # DEBUG: Log connection params (mask password)
-    import sys
-    pwd_masked = (result["password"][:3] + "***" + result["password"][-2:]) if result["password"] else "NONE"
-    print(f"[DB_DEBUG] Connecting to {result['server']}:{result['port']} user={result['user']} db={result['database']} pwd_masked={pwd_masked}", file=sys.stderr)
-    return result
+
+
+def _normalize_odbc_connection_string(cs):
+    normalized = cs.strip().rstrip(";")
+    lower = normalized.lower()
+
+    if "driver=" not in lower:
+        normalized = "Driver={ODBC Driver 18 for SQL Server};" + normalized
+
+    if "encrypt=" not in lower:
+        normalized += ";Encrypt=yes"
+
+    if "trustservercertificate=" not in lower:
+        normalized += ";TrustServerCertificate=no"
+
+    if "connection timeout=" not in lower and "connect timeout=" not in lower:
+        normalized += ";Connection Timeout=30"
+
+    return normalized + ";"
+
+
+def _open_conn_pyodbc():
+    if pyodbc is None:
+        raise RuntimeError("pyodbc not available")
+
+    cs = _normalize_odbc_connection_string(_get_connection_string())
+    return pyodbc.connect(cs, autocommit=False)
+
+
+def _open_conn_pymssql():
+    p = _get_params()
+    return pymssql.connect(
+        server=p["server"],
+        port=p["port"],
+        user=p["user"],
+        password=p["password"],
+        database=p["database"],
+        tds_version="7.4",
+        login_timeout=10,
+        timeout=30,
+    )
 
 
 def _open_conn():
-    """Open a pymssql connection with retry for Azure SQL auto-pause wakeup."""
-    p = _get_params()
+    """Open DB connection with retries for Azure SQL cold starts/network jitter."""
+    global _DB_DRIVER
     last_exc = None
-    max_attempts = 6
-    import sys
+    max_attempts = 5
+
     for attempt in range(1, max_attempts + 1):
-        try:
-            print(f"[DB_DEBUG] Connection attempt {attempt}/{max_attempts}...", file=sys.stderr)
-            return pymssql.connect(
-                server=p["server"],
-                port=p["port"],
-                user=p["user"],
-                password=p["password"],
-                database=p["database"],
-                tds_version="7.4",
-                login_timeout=60,
-            )
-        except (pymssql.OperationalError, pymssql.InterfaceError) as exc:
-            last_exc = exc
-            print(f"[DB_DEBUG] Attempt {attempt} failed: {exc}", file=sys.stderr)
-            if attempt < max_attempts:
-                try:
-                    import streamlit as st
-                    st.toast(f"Datenbank wacht auf\u2026 (Versuch {attempt}/{max_attempts})", icon="\u23f3")
-                except Exception:
-                    pass
-                time.sleep(20)
-    print(f"[DB_DEBUG] All {max_attempts} attempts failed. Final error: {last_exc}", file=sys.stderr)
-    raise last_exc
+        if _DB_DRIVER is None:
+            candidates = ["pyodbc", "pymssql"] if pyodbc is not None else ["pymssql"]
+        else:
+            candidates = [_DB_DRIVER]
+
+        for driver in candidates:
+            try:
+                if driver == "pyodbc":
+                    conn = _open_conn_pyodbc()
+                else:
+                    conn = _open_conn_pymssql()
+                _DB_DRIVER = driver
+                return conn
+            except Exception as exc:
+                last_exc = exc
+
+        if attempt < max_attempts:
+            try:
+                import streamlit as st
+                st.toast(f"Datenbank wacht auf... (Versuch {attempt}/{max_attempts})", icon="\u23f3")
+            except Exception:
+                pass
+            # Short bounded backoff keeps UI responsive while still handling wakeup.
+            time.sleep(min(2 * attempt, 8))
+
+    driver_hint = "unknown" if _DB_DRIVER is None else _DB_DRIVER
+    raise RuntimeError(f"DB connection failed after {max_attempts} attempts (driver={driver_hint}): {last_exc}")
+
+
+def _as_dict_rows(cursor):
+    if _DB_DRIVER == "pyodbc":
+        cols = [c[0] for c in cursor.description] if cursor.description else []
+        return [dict(zip(cols, row)) for row in cursor.fetchall()]
+    return cursor.fetchall()
 
 
 def query(sql, params=None):
     """Execute SELECT, return list of dicts."""
     conn = _open_conn()
     try:
-        cursor = conn.cursor(as_dict=True)
-        cursor.execute(sql, params or ())
-        return cursor.fetchall()
+        if _DB_DRIVER == "pyodbc":
+            cursor = conn.cursor()
+            sql_exec = sql.replace("%s", "?")
+        else:
+            cursor = conn.cursor(as_dict=True)
+            sql_exec = sql
+        cursor.execute(sql_exec, params or ())
+        return _as_dict_rows(cursor)
     finally:
         conn.close()
 
@@ -84,7 +150,8 @@ def execute(sql, params=None):
     conn = _open_conn()
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, params or ())
+        sql_exec = sql.replace("%s", "?") if _DB_DRIVER == "pyodbc" else sql
+        cursor.execute(sql_exec, params or ())
         conn.commit()
     finally:
         conn.close()

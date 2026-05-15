@@ -1593,6 +1593,16 @@ def bewertung_wettkampf():
                     "CategoryStart": str(category),
                 })
 
+            jem_qual = bool(comp_row.get("qual-JEM", False))
+            em_qual = bool(comp_row.get("qual-EM", False))
+            wm_qual = bool(comp_row.get("qual-WM", False))
+            regional_qual = bool(comp_row.get("qual-Regional", False))
+
+            excluded_synchro = (
+                str(category).strip().lower() in ["jugend c", "jugend d"] and
+                str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
+            )
+
             base_selection = relevant_selection
             if "year" in relevant_selection.columns:
                 by_piste = None
@@ -1623,16 +1633,11 @@ def bewertung_wettkampf():
             if relevant_selection.empty:
                 # already counted by missing_selection_combos
                 pass
-            elif regional_row.empty:
+            elif regional_qual and not excluded_synchro and regional_row.empty and jem_row.empty:
                 no_regional_ref_rows += 1
 
             if (not relevant_selection.empty) and jem_row.empty and em_row.empty and wm_row.empty and regional_row.empty:
                 no_threshold_rows += 1
-
-            jem_qual = bool(comp_row.get("qual-JEM", False))
-            em_qual = bool(comp_row.get("qual-EM", False))
-            wm_qual = bool(comp_row.get("qual-WM", False))
-            regional_qual = bool(comp_row.get("qual-Regional", False))
 
             try:
                 points_float = float(points)
@@ -1659,11 +1664,6 @@ def bewertung_wettkampf():
                 except Exception:
                     pass
 
-            excluded_synchro = (
-                str(category).strip().lower() in ["jugend c", "jugend d"] and
-                str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
-            )
-
             if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= REGIONAL_TEAM_MIN_PERCENT:
                 regionalteam = "yes"
 
@@ -1687,7 +1687,7 @@ def bewertung_wettkampf():
             f"Diagnose: total in PisteYear={selected_pisteyear}: {total_in_year} | "
             f"ohne selectionpoints-Match: {len(missing_selection_combos)} | "
             f"selectionpoints vorhanden aber keine JEM/EM/WM/Regional-Zeile: {no_threshold_rows} | "
-            f"selectionpoints vorhanden aber keine Regional-Referenz: {no_regional_ref_rows}"
+            f"Regional qualifiziert (nicht Synchro C/D), aber ohne Regional- und ohne JEM-Referenz: {no_regional_ref_rows}"
         )
         if seen_regional_labels:
             st.info("Gefundene selectionpoints-Competition Labels für Regional: " + ", ".join(sorted(seen_regional_labels)))
@@ -2818,13 +2818,20 @@ def manage_tool_environment():
             skipped = []
             # Athleten-Liste für Lookup laden
             athletes_db = db.table_select('athletes', 'first_name, last_name, birthdate')
+            athlete_lookup_name = {
+                (a['first_name'].strip().lower(), a['last_name'].strip().lower()): a
+                for a in athletes_db
+            }
             for _, row in df.iterrows():
-                found = any(
-                    (str(row['first_name']).strip().lower() == a['first_name'].strip().lower() and
-                    str(row['last_name']).strip().lower() == a['last_name'].strip().lower() and
-                    str(row.get('birthdate', '')).strip() == str(a['birthdate']))
-                    for a in athletes_db
-                )
+                first = str(row['first_name']).strip().lower()
+                last = str(row['last_name']).strip().lower()
+                csv_birthdate = str(row.get('birthdate', '')).strip().split(' ')[0]
+
+                found = (first, last) in athlete_lookup_name
+                if found and csv_birthdate:
+                    athlete_birthdate = str(athlete_lookup_name[(first, last)].get('birthdate') or '').strip().split(' ')[0]
+                    found = athlete_birthdate == csv_birthdate
+
                 if not found:
                     skipped.append({"first_name": row["first_name"], "last_name": row["last_name"], "birthdate": row.get("birthdate", "")})
                     continue
@@ -3030,19 +3037,23 @@ def manage_trainingsperformance_resilienz():
         skipped = []
         # Athleten-Liste für Lookup laden
         athletes_db = db.table_select('athletes', 'first_name, last_name, birthdate')
-        athlete_lookup_full = {
-            (a['first_name'].strip().lower(), a['last_name'].strip().lower(), str(a['birthdate'])): a
+        athlete_lookup_name = {
+            (a['first_name'].strip().lower(), a['last_name'].strip().lower()): a
             for a in athletes_db
         }
         for _, row in df.iterrows():
-            key = (str(row['first_name']).strip().lower(), str(row['last_name']).strip().lower(), str(row.get('birthdate', '')).strip())
-            # Prüfe, ob Athlet existiert (alle drei Felder müssen stimmen)
-            found = any(
-                (str(row['first_name']).strip().lower() == a['first_name'].strip().lower() and
-                str(row['last_name']).strip().lower() == a['last_name'].strip().lower() and
-                str(row.get('birthdate', '')).strip() == str(a['birthdate']))
-                for a in athletes_db
-            )
+            first = str(row['first_name']).strip().lower()
+            last = str(row['last_name']).strip().lower()
+            csv_birthdate = str(row.get('birthdate', '')).strip().split(' ')[0]
+
+            # Standardfall: Match über Vorname/Nachname (birthdate ist in required_cols nicht enthalten)
+            found = (first, last) in athlete_lookup_name
+
+            # Falls birthdate im CSV dennoch vorhanden ist, nur dann zusätzlich prüfen
+            if found and csv_birthdate:
+                athlete_birthdate = str(athlete_lookup_name[(first, last)].get('birthdate') or '').strip().split(' ')[0]
+                found = athlete_birthdate == csv_birthdate
+
             if not found:
                 skipped.append({"first_name": row["first_name"], "last_name": row["last_name"], "birthdate": row.get("birthdate", "")})
                 continue
@@ -3306,30 +3317,12 @@ def soc_full_calculation():
             ]
             athlete_data_map[key]["CompPointsRegionalTeam"] = "yes" if relevant_results_regio else "no"
 
-        # --- Jetzt alle Daten in socadditionalvalues schreiben (Batch) ---
-        max_id_row = db.query("SELECT ISNULL(MAX(id), 0) AS max_id FROM [socadditionalvalues]")
-        next_id = (max_id_row[0]['max_id'] if max_id_row else 0) + 1
-        updates = []
-        for key, data in athlete_data_map.items():
-            existing = existing_lookup.get(key)
-            if existing:
-                updates.append(("update", data))
-            else:
-                data["id"] = next_id
-                next_id += 1
-                updates.append(("insert", data))
+        # --- Existing rows for this year are removed first so recalculation is idempotent ---
+        db.execute("DELETE FROM [socadditionalvalues] WHERE [PisteYear] = %s", [pisteyear])
 
-        batch_size = 500
-        for i in range(0, len(updates), batch_size):
-            batch = updates[i:i+batch_size]
-            for action, data in batch:
-                if action == "update":
-                    db.table_update("socadditionalvalues", data,
-                        first_name=data['first_name'],
-                        last_name=data['last_name'],
-                        PisteYear=data['PisteYear'])
-                else:
-                    db.table_insert("socadditionalvalues", data)
+        # --- Now insert the freshly calculated rows ---
+        for data in athlete_data_map.values():
+            db.table_insert("socadditionalvalues", data)
 
         # --- totalpoints berechnen und speichern ---
         fields = [
