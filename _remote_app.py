@@ -2242,6 +2242,150 @@ def safe_numeric(val):
     except Exception:
         return None
 
+def wettkampf_performance_per_athlete():
+    """Zeige Wettkampfperformance für einen gefilterten Athleten mit Top-3 Wettkämpfen pro Jahr."""
+    st.header("🏊 Wettkampf-Performance pro Athlet")
+    
+    # Lade Athleten
+    athletes = db.table_select('athletes', 'first_name, last_name')
+    athlete_names = {f"{a['first_name']} {a['last_name']}": (a['first_name'], a['last_name']) for a in athletes}
+    
+    selected_athlete = st.selectbox("Athlet auswählen", sorted(athlete_names.keys()))
+    if not selected_athlete:
+        st.info("Bitte wählen Sie einen Athleten aus.")
+        return
+    
+    first_name, last_name = athlete_names[selected_athlete]
+    
+    # Lade pisterefcompresults für diesen Athleten
+    results = db.query("""
+        SELECT 
+            PisteYear,
+            competition1, discipline1, points1, reference1, pointsaverage1,
+            competition2, discipline2, points2, reference2, pointsaverage2,
+            competition3, discipline3, points3, reference3, pointsaverage3,
+            refaverage, performance, quality
+        FROM pisterefcompresults
+        WHERE LTRIM(RTRIM(first_name))=%s AND LTRIM(RTRIM(last_name))=%s
+        ORDER BY TRY_CONVERT(int, PisteYear)
+    """, first_name, last_name)
+    
+    if not results:
+        st.warning(f"Keine Wettkampfresultate für {selected_athlete} gefunden.")
+        return
+    
+    st.success(f"✅ {len(results)} Jahre mit Wettkampfresultaten gefunden.")
+    
+    # Tabelle der Top-3 Wettkämpfe pro Jahr
+    st.subheader("📋 Top-3 Wettkämpfe pro Jahr")
+    
+    table_data = []
+    for row in results:
+        year = row['PisteYear']
+        for slot in [1, 2, 3]:
+            comp_key = f'competition{slot}'
+            disc_key = f'discipline{slot}'
+            pts_key = f'points{slot}'
+            ref_key = f'reference{slot}'
+            
+            comp = row.get(comp_key, '-')
+            disc = row.get(disc_key, '-')
+            pts = row.get(pts_key, '-')
+            ref = row.get(ref_key, '-')
+            
+            table_data.append({
+                'Jahr': year,
+                'Slot': slot,
+                'Wettkampf': comp if comp else '-',
+                'Disziplin': disc if disc else '-',
+                'Punkte': pts if pts is not None else '-',
+                'Reference': ref if ref is not None else '-'
+            })
+    
+    df_table = pd.DataFrame(table_data)
+    st.dataframe(df_table, use_container_width=True)
+    
+    # Zusammenfassung pro Jahr
+    st.subheader("📊 Performance-Zusammenfassung pro Jahr")
+    
+    summary_data = []
+    for row in results:
+        year = row['PisteYear']
+        refavg = row.get('refaverage')
+        perf = row.get('performance')
+        quality = row.get('quality')
+        
+        summary_data.append({
+            'Jahr': year,
+            'Ref-Durchschnitt': f"{refavg:.2f}" if refavg else '-',
+            'Performance (%)': f"{perf:.2f}%" if perf else '-',
+            'Qualität': quality if quality else '-'
+        })
+    
+    df_summary = pd.DataFrame(summary_data)
+    st.dataframe(df_summary, use_container_width=True)
+    
+    # Grafik: Refaverage vs Jahr (Trend)
+    st.subheader("📈 Trend: Ref-Durchschnitt über Zeit")
+    
+    df_trend = pd.DataFrame(results)
+    df_trend['PisteYear'] = df_trend['PisteYear'].astype(int)
+    df_trend['refaverage'] = pd.to_numeric(df_trend['refaverage'], errors='coerce')
+    df_trend = df_trend.dropna(subset=['refaverage'])
+    
+    if not df_trend.empty:
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(df_trend['PisteYear'], df_trend['refaverage'], marker='o', linewidth=2, markersize=8, color='#1f77b4', label='Ref-Durchschnitt')
+        ax.set_xlabel('Jahr', fontsize=12)
+        ax.set_ylabel('Ref-Durchschnitt', fontsize=12)
+        ax.set_title(f'Wettkampf-Trend für {selected_athlete}', fontsize=14, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        
+        # Xticks auf ganze Jahre setzen
+        years_int = sorted(df_trend['PisteYear'].unique())
+        ax.set_xticks(years_int)
+        
+        st.pyplot(fig)
+        plt.close()
+    else:
+        st.warning("Keine Trend-Daten für Grafik verfügbar.")
+    
+    # Grafik: Points pro Slot pro Jahr
+    st.subheader("📊 Top-3 Punkte pro Jahr")
+    
+    df_points = df_trend.copy()
+    df_points['points1'] = pd.to_numeric(df_points['points1'], errors='coerce')
+    df_points['points2'] = pd.to_numeric(df_points['points2'], errors='coerce')
+    df_points['points3'] = pd.to_numeric(df_points['points3'], errors='coerce')
+    
+    fig, ax = plt.subplots(figsize=(10, 5))
+    
+    # Filtere Jahre mit mindestens einem Punkt-Wert
+    df_points_plot = df_points[df_points[['points1', 'points2', 'points3']].notna().any(axis=1)]
+    
+    if not df_points_plot.empty:
+        x = df_points_plot['PisteYear']
+        width = 0.25
+        x_pos = range(len(x))
+        
+        ax.bar([i - width for i in x_pos], df_points_plot['points1'].fillna(0), width, label='1. Wettkampf', color='#2ca02c', alpha=0.8)
+        ax.bar([i for i in x_pos], df_points_plot['points2'].fillna(0), width, label='2. Wettkampf', color='#ff7f0e', alpha=0.8)
+        ax.bar([i + width for i in x_pos], df_points_plot['points3'].fillna(0), width, label='3. Wettkampf', color='#d62728', alpha=0.8)
+        
+        ax.set_xlabel('Jahr', fontsize=12)
+        ax.set_ylabel('Punkte', fontsize=12)
+        ax.set_title(f'Top-3 Punkte-Verteilung für {selected_athlete}', fontsize=14, fontweight='bold')
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(x)
+        ax.legend()
+        ax.grid(True, alpha=0.3, axis='y')
+        
+        st.pyplot(fig)
+        plt.close()
+    else:
+        st.warning("Keine Punkte-Daten für Grafik verfügbar.")
+
 def piste_refpoint_wettkampf_analyse():
     st.header("📊 Piste RefPoint Wettkampf Analyse")
 
@@ -4199,6 +4343,7 @@ def main():
         "Wettkampfauswertungen",
         "Wettkampf-Bewertung",
         "Wettkaempfe Top 3",
+        "Wettkampf-Performance pro Athlet",
         "Piste RefPoint Competition Analyse",
         "Tool Environment",
         "Piste Mirwald",
@@ -4247,6 +4392,8 @@ def main():
         piste_refpoint_wettkampf_analyse()
     elif selected == "Wettkaempfe Top 3":
         show_top3_wettkaempfe()
+    elif selected == "Wettkampf-Performance pro Athlet":
+        wettkampf_performance_per_athlete()
     elif selected == "Tool Environment":
         manage_tool_environment()
     elif selected == "Trainingsperformance - Resilienz":
