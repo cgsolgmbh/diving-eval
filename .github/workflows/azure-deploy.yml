@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       APP_NAME: app-skthun-divingeval-prod
+      HAS_PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE != '' }}
+      HAS_AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS != '' }}
 
     steps:
       - name: Checkout repository
@@ -27,26 +29,26 @@ jobs:
 
       - name: Validate Azure deployment credentials
         run: |
-          if [ -z "${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}" ] && [ -z "${{ secrets.AZURE_CREDENTIALS }}" ]; then
+          if [ "${HAS_PUBLISH_PROFILE}" != "true" ] && [ "${HAS_AZURE_CREDENTIALS}" != "true" ]; then
             echo "Missing credentials. Configure AZURE_WEBAPP_PUBLISH_PROFILE or AZURE_CREDENTIALS in GitHub repository secrets."
             exit 1
           fi
 
       - name: Azure login (Service Principal)
-        if: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE == '' && secrets.AZURE_CREDENTIALS != '' }}
+        if: ${{ env.HAS_PUBLISH_PROFILE != 'true' && env.HAS_AZURE_CREDENTIALS == 'true' }}
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Deploy to Azure Web App (Publish Profile)
-        if: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE != '' }}
+        if: ${{ env.HAS_PUBLISH_PROFILE == 'true' }}
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.APP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
 
       - name: Deploy to Azure Web App (Azure Login)
-        if: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE == '' && secrets.AZURE_CREDENTIALS != '' }}
+        if: ${{ env.HAS_PUBLISH_PROFILE != 'true' && env.HAS_AZURE_CREDENTIALS == 'true' }}
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.APP_NAME }}
