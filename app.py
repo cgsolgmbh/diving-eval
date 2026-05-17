@@ -315,6 +315,9 @@ def startseite():
         if st.button("Wettkampfresultate eingeben"):
             st.session_state["page"] = "Wettkampfresultate eingeben"
             st.rerun()
+        if st.button("Wettkampfresultate korrigieren"):
+            st.session_state["page"] = "Wettkampfresultate korrigieren"
+            st.rerun()
     with col3:
         if st.button("Vergleich BIG Competitions"):
             st.session_state["page"] = "Vergleich BIG Competitions"
@@ -2248,6 +2251,176 @@ def manage_compresults_entry():
                     st.dataframe(pd.DataFrame(skipped_dl))
             except Exception as e:
                 st.error(f"❌ Import fehlgeschlagen: {e}")
+
+def manage_compresults_correction():
+    st.header("🛠️ Wettkampfresultate korrigieren")
+
+    comp_results = fetch_all_rows("compresults", select="*")
+    if not comp_results:
+        st.info("Keine Wettkampfresultate vorhanden.")
+        return
+
+    df = pd.DataFrame(comp_results)
+    required_cols = ["id", "first_name", "last_name", "sex", "Competition", "Discipline", "CategoryStart", "PreFin", "Points", "Difficulty"]
+    for col in required_cols:
+        if col not in df.columns:
+            df[col] = None
+
+    competitions = sorted(
+        {
+            str(c).strip()
+            for c in df["Competition"].dropna().tolist()
+            if str(c).strip() and str(c).strip().lower() != "nan"
+        }
+    )
+    if not competitions:
+        st.info("Keine Wettkämpfe in compresults gefunden.")
+        return
+
+    selected_competition = st.selectbox("Wettkampf", competitions)
+    df_comp = df[df["Competition"].astype(str).str.strip() == selected_competition].copy()
+    if df_comp.empty:
+        st.info("Keine Resultate für den gewählten Wettkampf gefunden.")
+        return
+
+    df_comp["athlete_label"] = (
+        df_comp["first_name"].fillna("").astype(str).str.strip()
+        + " "
+        + df_comp["last_name"].fillna("").astype(str).str.strip()
+    ).str.strip()
+
+    athletes = sorted(
+        {
+            str(a).strip()
+            for a in df_comp["athlete_label"].dropna().tolist()
+            if str(a).strip() and str(a).strip().lower() != "nan"
+        }
+    )
+    if not athletes:
+        st.info("Keine Athleten für den gewählten Wettkampf gefunden.")
+        return
+
+    selected_athlete = st.selectbox("Athlet", athletes)
+    df_ath = df_comp[df_comp["athlete_label"] == selected_athlete].copy()
+    if df_ath.empty:
+        st.info("Keine Resultate für den gewählten Athleten gefunden.")
+        return
+
+    disciplines = sorted(
+        {
+            str(d).strip()
+            for d in df_ath["Discipline"].dropna().tolist()
+            if str(d).strip() and str(d).strip().lower() != "nan"
+        }
+    )
+    if not disciplines:
+        st.info("Keine Disziplinen für den gewählten Athleten gefunden.")
+        return
+
+    selected_discipline = st.selectbox("Disziplin (aktueller Eintrag)", disciplines)
+    df_target = df_ath[df_ath["Discipline"].astype(str).str.strip() == selected_discipline].copy()
+    if df_target.empty:
+        st.info("Kein passender Eintrag gefunden.")
+        return
+
+    if len(df_target) > 1:
+        row_options = []
+        for _, row in df_target.iterrows():
+            row_options.append(
+                f"id={row.get('id')} | PreFin={row.get('PreFin')} | Punkte={row.get('Points')} | Difficulty={row.get('Difficulty')}"
+            )
+        selected_row = st.selectbox("Eintrag", row_options)
+        selected_id = int(str(selected_row).split("|")[0].replace("id=", "").strip())
+        current = df_target[df_target["id"] == selected_id].iloc[0]
+    else:
+        current = df_target.iloc[0]
+
+    def _safe_float(value, fallback=0.0):
+        try:
+            if value in (None, "", "nan"):
+                return fallback
+            return float(value)
+        except Exception:
+            return fallback
+
+    current_discipline = str(current.get("Discipline") or "").strip()
+    current_category = str(current.get("CategoryStart") or "").strip()
+    current_prefin = str(current.get("PreFin") or "").strip()
+    current_points = _safe_float(current.get("Points"), 0.0)
+    current_difficulty = _safe_float(current.get("Difficulty"), 0.0)
+
+    all_discipline_values = sorted(
+        {
+            str(d).strip()
+            for d in df["Discipline"].dropna().tolist()
+            if str(d).strip() and str(d).strip().lower() != "nan"
+        }
+    )
+    discipline_options = sorted(
+        set(["1m", "3m", "platform", "3m synchro", "platform synchro"] + all_discipline_values + [current_discipline])
+    )
+    category_options = ["Jugend A", "Jugend B", "Jugend C", "Jugend D", "Elite"]
+    prefin_options = ["FinalOnly", "Preliminary", "Final"]
+
+    new_discipline = st.selectbox(
+        "Neue Disziplin",
+        discipline_options,
+        index=discipline_options.index(current_discipline) if current_discipline in discipline_options else 0,
+    )
+    new_category = st.selectbox(
+        "Neue Kategorie",
+        category_options,
+        index=category_options.index(current_category) if current_category in category_options else 0,
+    )
+    new_prefin = st.selectbox(
+        "Neuer PreFin",
+        prefin_options,
+        index=prefin_options.index(current_prefin) if current_prefin in prefin_options else 0,
+    )
+    new_points = st.number_input("Neue Punktzahl", min_value=0.0, step=0.1, format="%.2f", value=current_points)
+    new_difficulty = st.number_input("Neue Difficulty", min_value=0.0, step=0.1, format="%.2f", value=current_difficulty)
+
+    if st.button("💾 Korrektur speichern"):
+        competitions_data = fetch_all_rows('competitions', select='Name, Date, PisteYear, [qual-Regional], [qual-JEM], [qual-EM], [qual-WM]')
+        selectionpoints_data = fetch_all_rows('selectionpoints')
+        competitions_df = pd.DataFrame(competitions_data)
+        selectionpoints_df = pd.DataFrame(selectionpoints_data)
+
+        sex_value = current.get("sex")
+        if sex_value in (None, "", "nan"):
+            athletes_data = fetch_all_rows("athletes", select="first_name, last_name, sex")
+            for athlete in athletes_data:
+                if (
+                    str(athlete.get("first_name", "")).strip().lower() == str(current.get("first_name", "")).strip().lower()
+                    and str(athlete.get("last_name", "")).strip().lower() == str(current.get("last_name", "")).strip().lower()
+                ):
+                    sex_value = athlete.get("sex")
+                    break
+
+        team_flags = {"NationalTeam": "no", "RegionalTeam": "no"}
+        if sex_value not in (None, "", "nan"):
+            team_flags = compute_compresult_team_flags(
+                competition_name=selected_competition,
+                sex=sex_value,
+                discipline=new_discipline,
+                category_start=new_category,
+                points=new_points,
+                competitions_df=competitions_df,
+                selectionpoints_df=selectionpoints_df,
+            )
+
+        update_payload = {
+            "Discipline": new_discipline,
+            "CategoryStart": new_category,
+            "PreFin": new_prefin,
+            "Points": new_points,
+            "Difficulty": new_difficulty,
+            "timestamp": None,
+            **team_flags,
+        }
+        db.table_update("compresults", update_payload, id=int(current["id"]))
+        st.success(f"Eintrag id={int(current['id'])} wurde korrigiert. timestamp wurde auf NULL gesetzt.")
+        st.rerun()
 
 def safe_numeric(val):
     if val in ("", None):
@@ -4331,6 +4504,8 @@ def main():
         "Piste Punkte neu berechnen",
         "Wettkampfauswertungen",
         "Wettkampf-Bewertung",
+        "Wettkampfresultate eingeben",
+        "Wettkampfresultate korrigieren",
         "Wettkaempfe Top 3",
         "Wettkampf-Performance pro Athlet",
         "Piste RefPoint Competition Analyse",
@@ -4377,6 +4552,8 @@ def main():
         bewertung_wettkampf()
     elif selected == "Wettkampfresultate eingeben":
         manage_compresults_entry()
+    elif selected == "Wettkampfresultate korrigieren":
+        manage_compresults_correction()
     elif selected == "Piste RefPoint Competition Analyse":
         piste_refpoint_wettkampf_analyse()
     elif selected == "Wettkaempfe Top 3":
