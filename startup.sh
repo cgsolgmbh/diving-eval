@@ -23,11 +23,8 @@ if [ ! -f "$IMPORT_FLAG" ]; then
     ) &
 fi
 
-# Find app.py in the Oryx-extracted archive directory (e.g. /tmp/XXXXX/app.py)
-APP_PY=$(find /tmp -maxdepth 2 -name 'app.py' 2>/dev/null | head -1)
-if [ -z "$APP_PY" ]; then
-    APP_PY=/home/site/wwwroot/app.py
-fi
+# Always run the deployed app from wwwroot to avoid stale /tmp artifacts.
+APP_PY=/home/site/wwwroot/app.py
 
 # Keep import path deterministic and do not inherit stale .python_packages entries.
 export PYTHONPATH="/home/site/wwwroot"
