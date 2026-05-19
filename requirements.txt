@@ -1,5 +1,7 @@
 streamlit>=1.18.1
 pymssql
+pyodbc
+python-tds
 pandas
 matplotlib
 seaborn

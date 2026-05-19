@@ -2432,6 +2432,21 @@ def safe_numeric(val):
 
 def wettkampf_performance_per_athlete():
     """Zeige Wettkampfperformance für einen gefilterten Athleten mit Top-3 Wettkämpfen pro Jahr."""
+    def format_optional_number(value, suffix=""):
+        if value in ("", None):
+            return "-"
+        try:
+            if isinstance(value, str):
+                cleaned = value.replace("%", "").replace(",", ".").strip()
+                if cleaned == "":
+                    return "-"
+                value = float(cleaned)
+            else:
+                value = float(value)
+        except Exception:
+            return "-"
+        return f"{value:.2f}{suffix}"
+
     st.header("🏊 Wettkampf-Performance pro Athlet")
     
     # Lade Athleten
@@ -2456,7 +2471,7 @@ def wettkampf_performance_per_athlete():
         FROM pisterefcompresults
         WHERE LTRIM(RTRIM(first_name))=%s AND LTRIM(RTRIM(last_name))=%s
         ORDER BY TRY_CONVERT(int, PisteYear)
-    """, first_name, last_name)
+    """, (first_name, last_name))
     
     if not results:
         st.warning(f"Keine Wettkampfresultate für {selected_athlete} gefunden.")
@@ -2505,8 +2520,8 @@ def wettkampf_performance_per_athlete():
         
         summary_data.append({
             'Jahr': year,
-            'Ref-Durchschnitt': f"{refavg:.2f}" if refavg else '-',
-            'Performance (%)': f"{perf:.2f}%" if perf else '-',
+            'Ref-Durchschnitt': format_optional_number(refavg),
+            'Performance (%)': format_optional_number(perf, "%"),
             'Qualität': quality if quality else '-'
         })
     
@@ -4013,7 +4028,7 @@ def athleten_anzeigen():
     try:
         df = pd.DataFrame(fetch_all_rows("athletes", select="*"))
     except Exception as e:
-        st.error(f"Athleten konnten nicht geladen werden: {e}")
+        st.error(f"Athleten konnten nicht geladen werden: {type(e).__name__}: {e}")
         return
 
     if df.empty:
