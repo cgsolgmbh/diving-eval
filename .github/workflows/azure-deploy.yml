@@ -7,6 +7,14 @@ on:
   push:
     branches:
       - main
+    paths:
+      - app.py
+      - db.py
+      - startup.sh
+      - requirements.txt
+      - sqltables/**
+      - .streamlit/config.toml
+      - .github/workflows/azure-deploy.yml
 
 jobs:
   deploy:
@@ -30,6 +38,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Build clean deployment package
+        run: |
+          rm -rf deploy_package
+          mkdir -p deploy_package
+          cp app.py db.py requirements.txt startup.sh deploy_package/
+          cp -R sqltables deploy_package/sqltables
+
+          if [ -d .streamlit ]; then
+            mkdir -p deploy_package/.streamlit
+            if [ -f .streamlit/config.toml ]; then
+              cp .streamlit/config.toml deploy_package/.streamlit/config.toml
+            fi
+          fi
+
       - name: Validate Azure deployment credentials
         run: |
           if [ "${HAS_PUBLISH_PROFILE}" != "true" ] && [ "${HAS_AZURE_CREDENTIALS}" != "true" ]; then
@@ -49,10 +71,11 @@ jobs:
         with:
           app-name: ${{ env.APP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: deploy_package
 
       - name: Deploy to Azure Web App (Azure Login)
         if: ${{ env.HAS_PUBLISH_PROFILE != 'true' && env.HAS_AZURE_CREDENTIALS == 'true' }}
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.APP_NAME }}
-          package: .
+          package: deploy_package

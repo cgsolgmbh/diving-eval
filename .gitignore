@@ -6,10 +6,38 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .env
+.venv/
+venv/
+result.json
 
 # VS Code
 .vscode/
 
+# Local Azure CLI defaults
+.azure/
+
 # OS
 .DS_Store
 Thumbs.db
+
+# Local diagnostics and deployment artifacts
+*.log
+*.txt
+*.zip
+loglist.json
+startup_remote.sh
+app_logs/
+logs/
+logs_*/
+logs_extracted/
+temp_extract/
+webapp_logs/
+webapp_logs_*/
+webapp-logs/
+webapp-logs-*/
+triage_logs/
+l/
+
+# Local publish profiles
+pub.xml
+pubprofile.xml
