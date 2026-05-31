@@ -1380,9 +1380,12 @@ def bewertung_wettkampf():
         limit = safe_numeric(selection_row.iloc[0].get('points'))
         if not limit:
             return "no", "", "no"
-        percentage = round((points / limit) * 100, 1)
+        points_val = safe_numeric(points)
+        if points_val is None:
+            return "no", "", "no"
+        percentage = round((points_val / limit) * 100, 1)
         if qual_flag:
-            status = "yes" if points >= limit else "no"
+            status = "yes" if points_val >= limit else "no"
         else:
             status = "no"
         national = "yes" if percentage >= NATIONAL_TEAM_MIN_PERCENT else "no"
