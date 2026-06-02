@@ -53,6 +53,29 @@ def get_scoretables():
 def fetch_all_rows(table, select="*", **filters):
     return db.table_select(table, select, **filters)
 
+def read_uploaded_csv_with_fallback(uploaded_file, **kwargs):
+    """Read uploaded CSV with common encoding fallbacks used by Excel exports."""
+    encodings = ["utf-8-sig", "utf-8", "cp1252", "latin-1"]
+    last_exc = None
+    for enc in encodings:
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass
+        try:
+            return pd.read_csv(uploaded_file, encoding=enc, **kwargs)
+        except UnicodeDecodeError as exc:
+            last_exc = exc
+            continue
+
+    try:
+        uploaded_file.seek(0)
+    except Exception:
+        pass
+    if last_exc:
+        raise last_exc
+    return pd.read_csv(uploaded_file, **kwargs)
+
 def get_lookup_dict(data, key, value):
     return {d[key]: d[value] for d in data}
 
@@ -600,7 +623,7 @@ def manage_results_entry():
         st.warning("Keine Athleten mit Vor- und Nachnamen gefunden! Prüfe die Datenbank und die Feldnamen.")
         return
 
-    selected_athlete_name = st.selectbox("Wähle einen Athleten", list(athlete_names.keys()))
+    selected_athlete_name = st.selectbox("Wähle einen Athleten", [""] + list(athlete_names.keys()), index=0)
     test_year = st.text_input("Testjahr (Format: yyyy)", value=str(datetime.date.today().year))
 
     if not test_year.isdigit() or len(test_year) != 4:
@@ -776,7 +799,7 @@ def edit_athletes():
         st.error(f"Athleten konnten nicht geladen werden: {e}")
         return
     athlete_names = {f"{a['first_name']} {a['last_name']}": a['id'] for a in athletes}
-    selected_name = st.selectbox("Athlet auswählen", list(athlete_names.keys()))
+    selected_name = st.selectbox("Athlet auswählen", [""] + list(athlete_names.keys()), index=0)
 
     if selected_name:
         athlete_id = athlete_names[selected_name]
@@ -811,6 +834,8 @@ def edit_athletes():
                 'category': category
             }, id=athlete_id)
             st.success("Athletendaten aktualisiert.")
+    else:
+        st.info("Bitte zuerst einen Athleten auswählen.")
 
 # Auswertung starten
 def auswertung_starten():
@@ -2280,7 +2305,11 @@ def manage_compresults_correction():
         st.info("Keine Wettkämpfe in compresults gefunden.")
         return
 
-    selected_competition = st.selectbox("Wettkampf", competitions)
+    selected_competition = st.selectbox("Wettkampf", [""] + competitions, index=0)
+    if not selected_competition:
+        st.info("Bitte zuerst einen Wettkampf auswählen.")
+        return
+
     df_comp = df[df["Competition"].astype(str).str.strip() == selected_competition].copy()
     if df_comp.empty:
         st.info("Keine Resultate für den gewählten Wettkampf gefunden.")
@@ -2303,7 +2332,11 @@ def manage_compresults_correction():
         st.info("Keine Athleten für den gewählten Wettkampf gefunden.")
         return
 
-    selected_athlete = st.selectbox("Athlet", athletes)
+    selected_athlete = st.selectbox("Athlet", [""] + athletes, index=0)
+    if not selected_athlete:
+        st.info("Bitte zuerst einen Athleten auswählen.")
+        return
+
     df_ath = df_comp[df_comp["athlete_label"] == selected_athlete].copy()
     if df_ath.empty:
         st.info("Keine Resultate für den gewählten Athleten gefunden.")
@@ -3114,16 +3147,38 @@ def manage_tool_environment():
      # Manuelle Eingabe
     st.subheader("🔹 Einzelnen Wert eingeben")
     pisteyear = st.number_input("PisteYear", min_value=2020, max_value=2100, value=datetime.date.today().year, step=1)
-    selected_athlete = st.selectbox("Athlet auswählen", athlete_names)
-    if selected_athlete:
-        first_name, last_name = selected_athlete.split(" ", 1)
-        db.table_insert("pistemirwald", {
-            "first_name": first_name,
-            "last_name": last_name,
-            "PisteYear": pisteyear,
-            "bioentwstand": 3
-        })
-        st.success(f"Eintrag für {selected_athlete} gespeichert.")
+    selected_athlete = st.selectbox("Athlet auswählen", [""] + athlete_names, index=0)
+    toolenvvalue = st.number_input("Tool Environment Wert", min_value=0.0, max_value=100.0, value=0.0, step=0.1, format="%.2f")
+
+    if st.button("💾 Wert speichern", key="tool_environment_save"):
+        if not selected_athlete:
+            st.warning("Bitte zuerst einen Athleten auswählen.")
+        else:
+            first_name, last_name = selected_athlete.split(" ", 1)
+            data = {
+                "first_name": first_name,
+                "last_name": last_name,
+                "PisteYear": int(pisteyear),
+                "toolenvvalue": float(toolenvvalue),
+            }
+            existing = db.table_select(
+                "pisteenvironment",
+                "first_name",
+                first_name=first_name,
+                last_name=last_name,
+                PisteYear=int(pisteyear),
+            )
+            if existing:
+                db.table_update(
+                    "pisteenvironment",
+                    {"toolenvvalue": float(toolenvvalue)},
+                    first_name=first_name,
+                    last_name=last_name,
+                    PisteYear=int(pisteyear),
+                )
+            else:
+                db.table_insert("pisteenvironment", data)
+            st.success(f"Eintrag für {selected_athlete} gespeichert.")
 
     st.markdown("---")
     st.subheader("🔹 CSV-Import")
@@ -3133,7 +3188,7 @@ def manage_tool_environment():
         "first_name": "Max",
         "last_name": "Mustermann",
         "PisteYear": 2024,
-        "bioentwstand": 3
+        "toolenvvalue": 7.5
     }])
     st.download_button(
         label="📄 Beispiel-CSV herunterladen",
@@ -3144,33 +3199,64 @@ def manage_tool_environment():
 
     uploaded_file = st.file_uploader("CSV-Datei mit Tool Environment-Werten hochladen", type="csv")
     if uploaded_file:
-        df = pd.read_csv(uploaded_file)
-        required_columns = {"first_name", "last_name", "PisteYear", "bioentwstand"}
-        if not required_columns.issubset(df.columns):
-            st.error(f"❌ Die Datei muss folgende Spalten enthalten: {', '.join(required_columns)}")
-            return
-
-        missing_athletes = []
-        inserted = 0
-        for _, row in df.iterrows():
-            key = (str(row['first_name']).strip().lower(), str(row['last_name']).strip().lower())
-            if key not in athlete_lookup:
-                missing_athletes.append({"first_name": row['first_name'], "last_name": row['last_name']})
-                continue
+        st.info("Datei geladen. Klicke auf '📤 Import starten', um den Import auszuführen.")
+        if st.button("📤 Import starten", key="tool_environment_import_submit"):
             try:
-                db.table_insert("pistemirwald", {
-                    "first_name": row['first_name'],
-                    "last_name": row['last_name'],
-                    "PisteYear": int(row['PisteYear']),
-                    "bioentwstand": int(row['bioentwstand'])
-                })
-                inserted += 1
+                df = read_uploaded_csv_with_fallback(uploaded_file)
+            except UnicodeDecodeError as e:
+                st.error(f"❌ Datei konnte nicht gelesen werden (Encoding): {e}")
+                return
             except Exception as e:
-                st.warning(f"Fehler beim Einfügen von {row['first_name']} {row['last_name']}: {e}")
-        st.success(f"{inserted} Einträge erfolgreich importiert.")
-        if missing_athletes:
-            st.warning(f"{len(missing_athletes)} Athlet(en) nicht gefunden:")
-            st.dataframe(pd.DataFrame(missing_athletes))
+                st.error(f"❌ Datei konnte nicht gelesen werden: {e}")
+                return
+
+            required_columns = {"first_name", "last_name", "PisteYear", "toolenvvalue"}
+            if not required_columns.issubset(df.columns):
+                st.error(f"❌ Die Datei muss folgende Spalten enthalten: {', '.join(required_columns)}")
+                return
+
+            missing_athletes = []
+            inserted = 0
+            for _, row in df.iterrows():
+                key = (str(row['first_name']).strip().lower(), str(row['last_name']).strip().lower())
+                if key not in athlete_lookup:
+                    missing_athletes.append({"first_name": row['first_name'], "last_name": row['last_name']})
+                    continue
+                try:
+                    first_name = str(row['first_name']).strip()
+                    last_name = str(row['last_name']).strip()
+                    year_val = int(row['PisteYear'])
+                    env_val = float(row['toolenvvalue'])
+
+                    existing = db.table_select(
+                        "pisteenvironment",
+                        "first_name",
+                        first_name=first_name,
+                        last_name=last_name,
+                        PisteYear=year_val,
+                    )
+                    if existing:
+                        db.table_update(
+                            "pisteenvironment",
+                            {"toolenvvalue": env_val},
+                            first_name=first_name,
+                            last_name=last_name,
+                            PisteYear=year_val,
+                        )
+                    else:
+                        db.table_insert("pisteenvironment", {
+                            "first_name": first_name,
+                            "last_name": last_name,
+                            "PisteYear": year_val,
+                            "toolenvvalue": env_val,
+                        })
+                    inserted += 1
+                except Exception as e:
+                    st.warning(f"Fehler beim Einfügen von {row['first_name']} {row['last_name']}: {e}")
+            st.success(f"{inserted} Einträge erfolgreich importiert.")
+            if missing_athletes:
+                st.warning(f"{len(missing_athletes)} Athlet(en) nicht gefunden:")
+                st.dataframe(pd.DataFrame(missing_athletes))
 
 def bio_mirwald():
     st.header("🧬 Bio Mirwald Eingabe & Import")
@@ -3181,11 +3267,14 @@ def bio_mirwald():
     athlete_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a for a in athletes}
 
     st.subheader("Einzel-Eingabe")
-    selected_name = st.selectbox("Athlet auswählen", athlete_names)
+    selected_name = st.selectbox("Athlet auswählen", [""] + athlete_names, index=0)
     pisteyear = st.number_input("PisteYear", min_value=2000, max_value=2100, value=datetime.date.today().year)
     bioentwstand = st.selectbox("bioentwstand", [1, 2, 3])
 
     if st.button("Speichern"):
+        if not selected_name:
+            st.warning("Bitte zuerst einen Athleten auswählen.")
+            return
         first_name, last_name = selected_name.split(" ", 1)
         db.table_insert("pistemirwald", {
             "first_name": first_name,
@@ -3253,7 +3342,7 @@ def manage_trainingsperformance_resilienz():
 
     st.subheader("🔹 Einzelnen Wert eingeben")
     pisteyear = st.number_input("PisteYear", min_value=2020, max_value=2100, value=datetime.date.today().year, step=1)
-    selected_athlete = st.selectbox("Athlet auswählen", athlete_names)
+    selected_athlete = st.selectbox("Athlet auswählen", [""] + athlete_names, index=0)
     if selected_athlete:
         first_name, last_name = selected_athlete.split(" ", 1)
         cols = st.columns(5)
@@ -3312,6 +3401,8 @@ def manage_trainingsperformance_resilienz():
             else:
                 db.table_insert("socadditionalvalues", data2)
             st.success("Wert gespeichert!")
+    else:
+        st.info("Bitte zuerst einen Athleten auswählen.")
 
     st.markdown("---")
     st.subheader("🔹 CSV-Import")
@@ -3343,51 +3434,61 @@ def manage_trainingsperformance_resilienz():
 
     uploaded_file = st.file_uploader("CSV-Datei mit Trainingsperformance-Werten hochladen", type="csv")
     if uploaded_file:
-        df = pd.read_csv(uploaded_file)
-        required_cols = {"first_name", "last_name", "PisteYear", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "trainingtime", "trainingsince"}
-        if not required_cols.issubset(df.columns):
-            st.error(f"❌ Die Datei muss folgende Spalten enthalten: {', '.join(required_cols)}")
-            return
-
-        inserted = 0
-        skipped = []
-        # Athleten-Liste für Lookup laden
-        athletes_db = db.table_select('athletes', 'first_name, last_name, birthdate')
-        athlete_lookup_name = {
-            (a['first_name'].strip().lower(), a['last_name'].strip().lower()): a
-            for a in athletes_db
-        }
-        for _, row in df.iterrows():
-            first = str(row['first_name']).strip().lower()
-            last = str(row['last_name']).strip().lower()
-            csv_birthdate = str(row.get('birthdate', '')).strip().split(' ')[0]
-
-            # Standardfall: Match über Vorname/Nachname (birthdate ist in required_cols nicht enthalten)
-            found = (first, last) in athlete_lookup_name
-
-            # Falls birthdate im CSV dennoch vorhanden ist, nur dann zusätzlich prüfen
-            if found and csv_birthdate:
-                athlete_birthdate = str(athlete_lookup_name[(first, last)].get('birthdate') or '').strip().split(' ')[0]
-                found = athlete_birthdate == csv_birthdate
-
-            if not found:
-                skipped.append({"first_name": row["first_name"], "last_name": row["last_name"], "birthdate": row.get("birthdate", "")})
-                continue
+        st.info("Datei geladen. Klicke auf '📤 Import starten', um den Import auszuführen.")
+        if st.button("📤 Import starten", key="trainingsperformance_import_submit"):
             try:
-                data = {col: row[col] for col in required_cols}
-                existing = db.table_select("trainingsperformance", "first_name", first_name=row["first_name"], last_name=row["last_name"], PisteYear=row["PisteYear"])
-                if existing:
-                    db.table_update("trainingsperformance", data, first_name=row["first_name"], last_name=row["last_name"], PisteYear=row["PisteYear"])
-                else:
-                    db.table_insert("trainingsperformance", data)
-
-                inserted += 1
+                df = read_uploaded_csv_with_fallback(uploaded_file)
+            except UnicodeDecodeError as e:
+                st.error(f"❌ Datei konnte nicht gelesen werden (Encoding): {e}")
+                return
             except Exception as e:
-                st.warning(f"Fehler bei {row['first_name']} {row['last_name']}: {e}")
-        st.success(f"✅ {inserted} Werte importiert.")
-        if skipped:
-            st.warning("Folgende Personen wurden nicht importiert, da sie nicht in der Athletenliste stehen:")
-            st.dataframe(pd.DataFrame(skipped))
+                st.error(f"❌ Datei konnte nicht gelesen werden: {e}")
+                return
+
+            required_cols = {"first_name", "last_name", "PisteYear", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "trainingtime", "trainingsince"}
+            if not required_cols.issubset(df.columns):
+                st.error(f"❌ Die Datei muss folgende Spalten enthalten: {', '.join(required_cols)}")
+                return
+
+            inserted = 0
+            skipped = []
+            # Athleten-Liste für Lookup laden
+            athletes_db = db.table_select('athletes', 'first_name, last_name, birthdate')
+            athlete_lookup_name = {
+                (a['first_name'].strip().lower(), a['last_name'].strip().lower()): a
+                for a in athletes_db
+            }
+            for _, row in df.iterrows():
+                first = str(row['first_name']).strip().lower()
+                last = str(row['last_name']).strip().lower()
+                csv_birthdate = str(row.get('birthdate', '')).strip().split(' ')[0]
+
+                # Standardfall: Match über Vorname/Nachname (birthdate ist in required_cols nicht enthalten)
+                found = (first, last) in athlete_lookup_name
+
+                # Falls birthdate im CSV dennoch vorhanden ist, nur dann zusätzlich prüfen
+                if found and csv_birthdate:
+                    athlete_birthdate = str(athlete_lookup_name[(first, last)].get('birthdate') or '').strip().split(' ')[0]
+                    found = athlete_birthdate == csv_birthdate
+
+                if not found:
+                    skipped.append({"first_name": row["first_name"], "last_name": row["last_name"], "birthdate": row.get("birthdate", "")})
+                    continue
+                try:
+                    data = {col: row[col] for col in required_cols}
+                    existing = db.table_select("trainingsperformance", "first_name", first_name=row["first_name"], last_name=row["last_name"], PisteYear=row["PisteYear"])
+                    if existing:
+                        db.table_update("trainingsperformance", data, first_name=row["first_name"], last_name=row["last_name"], PisteYear=row["PisteYear"])
+                    else:
+                        db.table_insert("trainingsperformance", data)
+
+                    inserted += 1
+                except Exception as e:
+                    st.warning(f"Fehler bei {row['first_name']} {row['last_name']}: {e}")
+            st.success(f"✅ {inserted} Werte importiert.")
+            if skipped:
+                st.warning("Folgende Personen wurden nicht importiert, da sie nicht in der Athletenliste stehen:")
+                st.dataframe(pd.DataFrame(skipped))
 
 def get_trainingsince_value(pisteyear, trainingsince, first_name, last_name):
     athlete = db.table_select('athletes', 'vintage', first_name=first_name, last_name=last_name)
