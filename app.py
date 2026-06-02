@@ -3821,6 +3821,13 @@ def soc_full_calculation():
 
             if pisteminnational == "yes" and comp_points_nt == "yes":
                 talentcard = "National"
+                db.table_update(
+                    "socadditionalvalues",
+                    {"CompPointsRegionalTeam": "no"},
+                    first_name=data['first_name'],
+                    last_name=data['last_name'],
+                    PisteYear=data['PisteYear']
+                )
             elif pisteminregio == "yes" and comp_points_regio == "yes":
                 talentcard = "Regional"
             else:
