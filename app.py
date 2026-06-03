@@ -306,6 +306,9 @@ def startseite():
         if st.button("Piste Ergebnisse eingeben"):
             st.session_state["page"] = "Piste Ergebnisse eingeben"
             st.rerun()
+        if st.button("Piste Ergebnisse bearbeiten"):
+            st.session_state["page"] = "Piste Ergebnisse bearbeiten"
+            st.rerun()
     with col2:
         if st.button("Piste Punkte neu berechnen"):
             st.session_state["page"] = "Piste Punkte neu berechnen"
@@ -932,6 +935,180 @@ def auswertung_starten():
         st.download_button("📥 Excel herunterladen", excel_buffer, file_name="resultate.xlsx")
     except ImportError:
         st.info("📦 Modul 'openpyxl' ist nicht installiert – Excel-Export nicht verfügbar.")
+
+
+def manage_pisteresults_correction():
+    st.header("🛠️ Piste Ergebnisse bearbeiten")
+
+    results = fetch_all_rows("pisteresults", select="*")
+    if not results:
+        st.info("Keine Piste-Ergebnisse vorhanden.")
+        return
+
+    athletes = get_athletes()
+    disciplines = get_pistedisciplines()
+
+    athlete_by_id = {a.get("id"): a for a in athletes if a.get("id")}
+    discipline_name_by_id = {d.get("id"): d.get("name") for d in disciplines if d.get("id")}
+
+    df = pd.DataFrame(results)
+    required_cols = ["id", "athlete_id", "discipline_id", "raw_result", "points", "TestYear", "category", "sex"]
+    for col in required_cols:
+        if col not in df.columns:
+            df[col] = None
+
+    df["athlete_label"] = df["athlete_id"].map(
+        lambda aid: (
+            f"{str((athlete_by_id.get(aid) or {}).get('first_name', '')).strip()} {str((athlete_by_id.get(aid) or {}).get('last_name', '')).strip()}"
+        ).strip()
+    )
+    df["discipline_name"] = df["discipline_id"].map(lambda did: discipline_name_by_id.get(did, "Unbekannt"))
+
+    years = sorted(
+        {
+            int(y)
+            for y in df["TestYear"].dropna().tolist()
+            if str(y).strip().isdigit()
+        },
+        reverse=True,
+    )
+    selected_year = st.selectbox("Testjahr", [""] + [str(y) for y in years], index=0)
+    if not selected_year:
+        st.info("Bitte zuerst ein Testjahr auswählen.")
+        return
+
+    df_year = df[df["TestYear"].astype(str).str.strip() == selected_year].copy()
+    if df_year.empty:
+        st.info("Keine Einträge für das gewählte Jahr gefunden.")
+        return
+
+    athletes_in_year = sorted(
+        {
+            str(a).strip()
+            for a in df_year["athlete_label"].dropna().tolist()
+            if str(a).strip() and str(a).strip().lower() != "nan"
+        }
+    )
+    selected_athlete = st.selectbox("Athlet", [""] + athletes_in_year, index=0)
+    if not selected_athlete:
+        st.info("Bitte zuerst einen Athleten auswählen.")
+        return
+
+    df_ath = df_year[df_year["athlete_label"] == selected_athlete].copy()
+    if df_ath.empty:
+        st.info("Keine Einträge für den gewählten Athleten gefunden.")
+        return
+
+    disciplines_in_athlete = sorted(
+        {
+            str(d).strip()
+            for d in df_ath["discipline_name"].dropna().tolist()
+            if str(d).strip() and str(d).strip().lower() != "nan"
+        }
+    )
+    selected_discipline = st.selectbox("Disziplin", [""] + disciplines_in_athlete, index=0)
+    if not selected_discipline:
+        st.info("Bitte zuerst eine Disziplin auswählen.")
+        return
+
+    df_target = df_ath[df_ath["discipline_name"] == selected_discipline].copy()
+    if df_target.empty:
+        st.info("Kein passender Eintrag gefunden.")
+        return
+
+    if len(df_target) > 1:
+        row_options = [
+            f"id={row.get('id')} | raw={row.get('raw_result')} | points={row.get('points')}"
+            for _, row in df_target.iterrows()
+        ]
+        selected_row = st.selectbox("Eintrag", row_options)
+        selected_id = int(str(selected_row).split("|")[0].replace("id=", "").strip())
+        current = df_target[df_target["id"] == selected_id].iloc[0]
+    else:
+        current = df_target.iloc[0]
+
+    athlete_id = current.get("athlete_id")
+    athlete_data = athlete_by_id.get(athlete_id, {})
+    sex = athlete_data.get("sex") or current.get("sex")
+    vintage = athlete_data.get("vintage")
+    category = get_category_from_testyear(vintage, selected_year) if vintage else current.get("category")
+
+    st.caption(
+        f"Aktuell: raw_result={current.get('raw_result')}, points={current.get('points')}, category={current.get('category')}, sex={current.get('sex')}"
+    )
+
+    all_disciplines = sorted(set([d.get("name") for d in disciplines if d.get("name")]))
+    current_discipline_name = str(current.get("discipline_name") or "")
+    if current_discipline_name and current_discipline_name not in all_disciplines:
+        all_disciplines.append(current_discipline_name)
+        all_disciplines = sorted(all_disciplines)
+
+    new_discipline_name = st.selectbox(
+        "Neue Disziplin",
+        all_disciplines,
+        index=all_disciplines.index(current_discipline_name) if current_discipline_name in all_disciplines else 0,
+    )
+    new_raw_result = st.text_input("Neuer raw_result", value=str(current.get("raw_result") or ""))
+
+    discipline_id_map = {d.get("name"): d.get("id") for d in disciplines if d.get("name") and d.get("id")}
+
+    if st.button("💾 Speichern"):
+        if not new_raw_result or not str(new_raw_result).strip():
+            st.error("Bitte einen gültigen raw_result eingeben.")
+            return
+
+        new_discipline_id = discipline_id_map.get(new_discipline_name)
+        if not new_discipline_id:
+            st.error("Die gewählte Disziplin konnte nicht zugeordnet werden.")
+            return
+
+        raw_str = str(new_raw_result).strip()
+        if raw_str == "9999":
+            raw_to_store = 9999
+            points = 0
+        else:
+            try:
+                raw_to_store = float(raw_str)
+            except Exception:
+                st.error("raw_result muss numerisch sein (oder 9999).")
+                return
+
+            excluded_ids = {
+                "640260ec-a094-462d-a69e-d91bbe35d94c",
+                "5906836a-24aa-40e1-a71f-614a7ea4a825",
+                "7eb062f7-3329-4cde-8875-bd6fd362137b",
+            }
+            if new_discipline_id in excluded_ids:
+                points = 0
+            else:
+                points = get_points(new_discipline_id, raw_to_store, category, sex)
+
+        db.table_update(
+            "pisteresults",
+            {
+                "discipline_id": new_discipline_id,
+                "raw_result": raw_to_store,
+                "points": points,
+                "category": category,
+                "sex": sex,
+            },
+            id=current.get("id"),
+        )
+        st.success("Eintrag aktualisiert.")
+        st.rerun()
+
+    if st.button("🗑️ Eintrag löschen"):
+        db.table_delete("pisteresults", id=current.get("id"))
+        st.warning("Eintrag gelöscht.")
+        st.rerun()
+
+    st.markdown("---")
+    st.subheader("Treffer für Jahr/Athlet")
+    st.dataframe(
+        df_ath[["id", "discipline_name", "raw_result", "points", "category", "sex", "TestYear"]]
+        .sort_values(by=["discipline_name", "id"], ascending=[True, True])
+        .reset_index(drop=True)
+    )
 
 
 def manage_scoretable():
@@ -4627,6 +4804,7 @@ def main():
         "Piste Mirwald",
         "Piste Resultate anzeigen",
         "Piste Ergebnisse eingeben",
+        "Piste Ergebnisse bearbeiten",
         "Piste Punkte neu berechnen",
         "Wettkampfauswertungen",
         "Wettkampf-Bewertung",
@@ -4670,6 +4848,8 @@ def main():
         auswertung_starten()
     elif selected == "Piste Ergebnisse eingeben":
         manage_results_entry()
+    elif selected == "Piste Ergebnisse bearbeiten":
+        manage_pisteresults_correction()
     elif selected == "Piste Punkte neu berechnen":
         punkte_neuberechnen()
     elif selected == "Wettkampfauswertungen":
