@@ -4437,307 +4437,191 @@ def selektionen_wettkaempfe():
 def referenztabellen_anzeigen():
     st.header("📚 Referenz- und Bewertungstabellen")
 
-    # --- Scoretables ---
-    st.subheader("🏅 Scoretabelle")
-    score_df = pd.DataFrame(fetch_all_rows("scoretables", select="*"))
     pistedisciplines = pd.DataFrame(fetch_all_rows("pistedisciplines", select="id,name"))
-    if not score_df.empty and not pistedisciplines.empty:
-        # Mapping discipline_id → name
-        disc_map = dict(zip(pistedisciplines["id"], pistedisciplines["name"]))
-        score_df["name"] = score_df["discipline_id"].map(disc_map)
-        show_cols = ["name", "category", "sex", "result_min", "result_max", "points"]
-        for col in show_cols:
-            if col not in score_df.columns:
-                score_df[col] = None
-        score_df = score_df[show_cols].sort_values(["name", "category", "sex", "result_min"])
-        st.dataframe(score_df)
-        st.download_button("📥 Scoretabelle als CSV", score_df.to_csv(index=False, encoding='utf-8-sig'), file_name="scoretables.csv", mime="text/csv")
-    else:
-        st.info("Keine Daten in scoretables oder pistedisciplines.")
+    discipline_name_by_id = {}
+    if not pistedisciplines.empty:
+        discipline_name_by_id = dict(zip(pistedisciplines["id"], pistedisciplines["name"]))
 
-    # --- Selectionpoints ---
-    st.subheader("🎯 Selectionpoints")
-    sel_df = pd.DataFrame(fetch_all_rows("selectionpoints", select="*"))
-    if not sel_df.empty:
-        show_cols = ["id", "Competition", "year", "category", "Discipline", "sex", "points", "difficulty"]
-        for col in show_cols:
-            if col not in sel_df.columns:
-                sel_df[col] = None
-        sel_df = sel_df[show_cols].sort_values(["Competition", "year", "category", "Discipline", "sex"]) 
-        st.dataframe(sel_df)
-        st.download_button("📥 Selectionpoints als CSV", sel_df.to_csv(index=False, encoding='utf-8-sig'), file_name="selectionpoints.csv", mime="text/csv")
+    def _norm(v):
+        if pd.isna(v):
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s if s else None
+        return v
 
-        st.markdown("---")
-        st.subheader("✏️ Selectionpoints bearbeiten")
+    def _render_inline_table(title, table_name, columns, key_prefix, filters=None, int_id=False, sort_by=None, persist_columns=None, disabled_cols=None, preprocess_fn=None, hidden_cols=None):
+        st.subheader(title)
+        rows = fetch_all_rows(table_name, select="*", **(filters or {}))
+        df = pd.DataFrame(rows)
 
-        competitions = sorted({str(v).strip() for v in sel_df["Competition"].dropna().tolist() if str(v).strip()})
-        years = sorted({str(v).strip() for v in sel_df["year"].dropna().tolist() if str(v).strip()})
+        for col in columns:
+            if col not in df.columns:
+                df[col] = None
 
-        selected_comp = st.selectbox("Competition filtern", ["Alle"] + competitions, key="sel_edit_comp")
-        selected_year = st.selectbox("Year filtern", ["Alle"] + years, key="sel_edit_year")
+        if sort_by:
+            safe_sort = [c for c in sort_by if c in df.columns]
+            if safe_sort and not df.empty:
+                df = df.sort_values(safe_sort)
 
-        filtered_sel = sel_df.copy()
-        if selected_comp != "Alle":
-            filtered_sel = filtered_sel[filtered_sel["Competition"].astype(str).str.strip() == selected_comp]
-        if selected_year != "Alle":
-            filtered_sel = filtered_sel[filtered_sel["year"].astype(str).str.strip() == selected_year]
+        if preprocess_fn:
+            df = preprocess_fn(df)
 
-        if "sel_pending_delete_id" not in st.session_state:
-            st.session_state["sel_pending_delete_id"] = None
+        editable = df[columns].copy().reset_index(drop=True)
+        persist_cols = persist_columns or columns
+        disabled = disabled_cols or (["id"] if "id" in columns else [])
+        hidden = set(hidden_cols or [])
+        column_config = {col: None for col in hidden if col in editable.columns}
+        edited = st.data_editor(
+            editable,
+            hide_index=True,
+            num_rows="dynamic",
+            disabled=disabled,
+            column_config=column_config,
+            key=f"{key_prefix}_editor",
+        )
 
-        if filtered_sel.empty:
-            st.info("Keine Selectionpoints für den gewählten Filter.")
-        else:
-            for _, row in filtered_sel.iterrows():
+        if st.button(f"💾 {title} speichern", key=f"{key_prefix}_save"):
+            if "id" not in columns:
+                st.error("Diese Tabelle kann nicht gespeichert werden (id-Spalte fehlt).")
+                return
+
+            orig = editable.copy()
+            new = edited.copy()
+
+            orig["id"] = orig["id"].apply(lambda x: None if pd.isna(x) else str(x))
+            new["id"] = new["id"].apply(lambda x: None if pd.isna(x) else str(x))
+
+            orig_ids = {v for v in orig["id"].tolist() if v}
+            new_ids = {v for v in new["id"].tolist() if v}
+
+            for del_id in sorted(orig_ids - new_ids):
+                db.table_delete(table_name, id=int(del_id) if int_id else del_id)
+
+            if int_id:
+                int_existing = []
+                for v in orig_ids:
+                    try:
+                        int_existing.append(int(v))
+                    except Exception:
+                        pass
+                next_id = (max(int_existing) + 1) if int_existing else 1
+
+            for _, row in new.iterrows():
                 row_id = row.get("id")
-                row_title = (
-                    f"id={row_id} | {row.get('Competition')} {row.get('year')} | "
-                    f"{row.get('category')} | {row.get('Discipline')} | {row.get('sex')}"
-                )
-                with st.expander(row_title):
-                    new_comp = st.text_input("Competition", value=str(row.get("Competition") or ""), key=f"sel_comp_{row_id}")
-                    new_year = st.text_input("Year", value=str(row.get("year") or ""), key=f"sel_year_{row_id}")
-                    new_cat = st.text_input("Category", value=str(row.get("category") or ""), key=f"sel_cat_{row_id}")
-                    new_disc = st.text_input("Discipline", value=str(row.get("Discipline") or ""), key=f"sel_disc_{row_id}")
-                    new_sex = st.selectbox(
-                        "Sex",
-                        ["female", "male"],
-                        index=0 if str(row.get("sex") or "").strip().lower() == "female" else 1,
-                        key=f"sel_sex_{row_id}",
-                    )
-                    new_points = st.text_input("Points", value=str(row.get("points") or ""), key=f"sel_points_{row_id}")
-                    new_difficulty = st.text_input("Difficulty", value=str(row.get("difficulty") or ""), key=f"sel_diff_{row_id}")
+                payload = {c: _norm(row.get(c)) for c in persist_cols if c != "id"}
+                payload = {k: v for k, v in payload.items() if v is not None}
 
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button("💾 Speichern", key=f"sel_save_{row_id}"):
-                            db.table_update(
-                                "selectionpoints",
-                                {
-                                    "Competition": new_comp.strip(),
-                                    "year": new_year.strip(),
-                                    "category": new_cat.strip(),
-                                    "Discipline": new_disc.strip(),
-                                    "sex": new_sex.strip(),
-                                    "points": new_points.strip(),
-                                    "difficulty": new_difficulty.strip(),
-                                },
-                                id=int(row_id),
-                            )
-                            st.success("Selectionpoint aktualisiert.")
-                            st.rerun()
-                    with col2:
-                        if st.button("🗑️ Löschen", key=f"sel_delete_{row_id}"):
-                            st.session_state["sel_pending_delete_id"] = int(row_id)
+                if not payload:
+                    continue
 
-                        if st.session_state.get("sel_pending_delete_id") == int(row_id):
-                            st.warning("Bitte Löschen bestätigen.")
-                            c1, c2 = st.columns(2)
-                            with c1:
-                                if st.button("✅ Löschen bestätigen", key=f"sel_delete_confirm_{row_id}"):
-                                    db.table_delete("selectionpoints", id=int(row_id))
-                                    st.session_state["sel_pending_delete_id"] = None
-                                    st.warning("Selectionpoint gelöscht.")
-                                    st.rerun()
-                            with c2:
-                                if st.button("Abbrechen", key=f"sel_delete_cancel_{row_id}"):
-                                    st.session_state["sel_pending_delete_id"] = None
-                                    st.rerun()
+                if not row_id:
+                    if int_id:
+                        while str(next_id) in orig_ids:
+                            next_id += 1
+                        payload["id"] = next_id
+                        db.table_insert(table_name, payload)
+                        orig_ids.add(str(next_id))
+                        next_id += 1
+                    else:
+                        db.table_insert(table_name, payload)
+                else:
+                    db.table_update(table_name, payload, id=int(row_id) if int_id else row_id)
 
-        st.markdown("---")
-        st.subheader("➕ Neuen Selectionpoint hinzufügen")
-        new_comp_add = st.text_input("Competition (neu)", value="JEM", key="sel_add_comp")
-        new_year_add = st.text_input("Year (neu)", value=str(datetime.date.today().year), key="sel_add_year")
-        new_cat_add = st.text_input("Category (neu)", key="sel_add_cat")
-        new_disc_add = st.text_input("Discipline (neu)", key="sel_add_disc")
-        new_sex_add = st.selectbox("Sex (neu)", ["female", "male"], key="sel_add_sex")
-        new_points_add = st.text_input("Points (neu)", key="sel_add_points")
-        new_diff_add = st.text_input("Difficulty (neu)", key="sel_add_diff")
+            st.success(f"{title} gespeichert.")
+            st.rerun()
 
-        if st.button("➕ Selectionpoint speichern", key="sel_add_save"):
-            if not new_cat_add.strip() or not new_disc_add.strip() or not new_points_add.strip():
-                st.error("Bitte mindestens Category, Discipline und Points ausfüllen.")
-            else:
-                try:
-                    next_id = int(pd.to_numeric(sel_df["id"], errors="coerce").max()) + 1
-                except Exception:
-                    next_id = 1
+    def _add_discipline_name(df):
+        if "discipline_id" in df.columns:
+            df = df.copy()
+            df["discipline_name"] = df["discipline_id"].map(lambda v: discipline_name_by_id.get(v, "Unbekannt"))
+        return df
 
-                db.table_insert(
-                    "selectionpoints",
-                    {
-                        "id": next_id,
-                        "Competition": new_comp_add.strip(),
-                        "year": new_year_add.strip(),
-                        "category": new_cat_add.strip(),
-                        "Discipline": new_disc_add.strip(),
-                        "sex": new_sex_add.strip(),
-                        "points": new_points_add.strip(),
-                        "difficulty": new_diff_add.strip(),
-                    },
-                )
-                st.success(f"Selectionpoint mit id={next_id} hinzugefügt.")
-                st.rerun()
-    else:
-        st.info("Keine Daten in selectionpoints.")
+    # Haupttabellen
+    _render_inline_table(
+        title="🏅 Scoretabelle",
+        table_name="scoretables",
+        columns=["id", "discipline_name", "discipline_id", "category", "sex", "result_min", "result_max", "points"],
+        persist_columns=["id", "discipline_id", "category", "sex", "result_min", "result_max", "points"],
+        disabled_cols=["id", "discipline_name"],
+        hidden_cols=["id", "discipline_id"],
+        preprocess_fn=_add_discipline_name,
+        key_prefix="scoretables",
+        int_id=False,
+        sort_by=["discipline_id", "category", "sex", "result_min"],
+    )
 
-    # --- pistereftrainingtime ---
-    st.subheader("⏱️ Piste Ref Training Time")
-    reftrain_df = pd.DataFrame(fetch_all_rows("pistereftrainingtime", select="*"))
-    if not reftrain_df.empty:
-        cols = ["age"] + [str(i) for i in range(4, 31)]
-        for col in cols:
-            if col not in reftrain_df.columns:
-                reftrain_df[col] = None
-        reftrain_df = reftrain_df[cols]
-        st.dataframe(reftrain_df)
-        st.download_button("📥 pistereftrainingtime als CSV", reftrain_df.to_csv(index=False, encoding='utf-8-sig'), file_name="pistereftrainingtime.csv", mime="text/csv")
-    else:
-        st.info("Keine Daten in pistereftrainingtime.")
+    _render_inline_table(
+        title="🎯 Selectionpoints",
+        table_name="selectionpoints",
+        columns=["id", "Competition", "year", "category", "Discipline", "sex", "points", "difficulty"],
+        key_prefix="selectionpoints",
+        int_id=True,
+        sort_by=["Competition", "year", "category", "Discipline", "sex"],
+    )
 
-    # --- pistereftrainingsince ---
-    st.subheader("📅 Piste Ref Training Since")
-    refsince_df = pd.DataFrame(fetch_all_rows("pistereftrainingsince", select="*"))
-    if not refsince_df.empty:
-        cols = ["age"] + [str(i) for i in range(1, 10)]
-        for col in cols:
-            if col not in refsince_df.columns:
-                refsince_df[col] = None
-        refsince_df = refsince_df[cols]
-        st.dataframe(refsince_df)
-        st.download_button("📥 pistereftrainingsince als CSV", refsince_df.to_csv(index=False, encoding='utf-8-sig'), file_name="pistereftrainingsince.csv", mime="text/csv")
-    else:
-        st.info("Keine Daten in pistereftrainingsince.")
+    _render_inline_table(
+        title="⏱️ Piste Ref Training Time",
+        table_name="pistereftrainingtime",
+        columns=["id", "age"] + [str(i) for i in range(4, 31)],
+        key_prefix="pistereftrainingtime",
+        int_id=True,
+        sort_by=["age"],
+    )
 
-    # --- pisterefminpoints ---
-    st.subheader("🔢 Piste Ref Min Points")
-    refmin_df = pd.DataFrame(fetch_all_rows("pisterefminpoints", select="*"))
-    if not refmin_df.empty:
-        cols = ["age", "points_max", "regio_min", "national_min"]
-        for col in cols:
-            if col not in refmin_df.columns:
-                refmin_df[col] = None
-        refmin_df = refmin_df[cols]
-        st.dataframe(refmin_df)
-        st.download_button("📥 pisterefminpoints als CSV", refmin_df.to_csv(index=False, encoding='utf-8-sig'), file_name="pisterefminpoints.csv", mime="text/csv")
-    else:
-        st.info("Keine Daten in pisterefminpoints.")
+    _render_inline_table(
+        title="📅 Piste Ref Training Since",
+        table_name="pistereftrainingsince",
+        columns=["id", "age"] + [str(i) for i in range(0, 15)],
+        key_prefix="pistereftrainingsince",
+        int_id=True,
+        sort_by=["age"],
+    )
 
-    # --- pisterefcomppoints ---
-    st.subheader("🏆 Piste Ref Comp Points")
-    refcomp_df = pd.DataFrame(fetch_all_rows("pisterefcomppoints", select="*"))
-    if not refcomp_df.empty:
-        # Spalten für Alter 9-18 und quality9-quality18
-        cols = ["Discipline", "sex"] + [str(i) for i in range(9, 19)] + [f"quality{i}" for i in range(9, 19)]
-        for col in cols:
-            if col not in refcomp_df.columns:
-                refcomp_df[col] = None
-        refcomp_df = refcomp_df[cols]
-        st.dataframe(refcomp_df)
-        st.download_button("📥 pisterefcomppoints als CSV", refcomp_df.to_csv(index=False, encoding='utf-8-sig'), file_name="pisterefcomppoints.csv", mime="text/csv")
-    else:
-        st.info("Keine Daten in pisterefcomppoints.")
+    _render_inline_table(
+        title="🔢 Piste Ref Min Points",
+        table_name="pisterefminpoints",
+        columns=["id", "age", "points_max", "regio_min", "national_min"],
+        key_prefix="pisterefminpoints",
+        int_id=True,
+        sort_by=["age"],
+    )
 
-    # --- Piste Points für PisteTotalinPoints ---
-    st.subheader("🏅 Piste Points (PisteTotalinPoints)")
-    pistedisciplines = pd.DataFrame(fetch_all_rows("pistedisciplines", select="id,name"))
-    pistetotalinpoints_id = None
+    _render_inline_table(
+        title="🏆 Piste Ref Comp Points",
+        table_name="pisterefcomppoints",
+        columns=["id", "Discipline", "sex"] + [str(i) for i in range(8, 20)] + [f"quality{i}" for i in range(8, 20)],
+        key_prefix="pisterefcomppoints",
+        int_id=True,
+        sort_by=["Discipline", "sex"],
+    )
+
     if not pistedisciplines.empty:
-        pistetotalinpoints_id = pistedisciplines[pistedisciplines["name"] == "PisteTotalinPoints"]["id"].iloc[0]
-    if pistetotalinpoints_id:
-        pistepoints_df = pd.DataFrame(fetch_all_rows("scoretables", select="*",
-                                                    discipline_id=pistetotalinpoints_id))
-        if not pistepoints_df.empty:
-            pistepoints_df = pistepoints_df.sort_values("result_min")
-            pistepoints_df = pistepoints_df[["result_min", "result_max", "points"]]
-            pistepoints_df = pistepoints_df.rename(columns={
-                "result_min": "Von (Durchschnitt)",
-                "result_max": "Bis (Durchschnitt)",
-                "points": "Piste Points"
-            })
-            st.dataframe(pistepoints_df)
-            st.download_button("📥 Piste Points als CSV", pistepoints_df.to_csv(index=False, encoding='utf-8-sig'), file_name="piste_points.csv", mime="text/csv")
-        else:
-            st.info("Keine Piste Points für PisteTotalinPoints gefunden.")
-    else:
-        st.info("Disziplin 'PisteTotalinPoints' nicht gefunden.")
-
-    # --- CompPerfEnhance (Leistungsentwicklung) ---
-    st.subheader("📈 Leistungsentwicklung (CompPerfEnhance)")
-    comp_perf_enhance_id = None
-    if not pistedisciplines.empty:
-        comp_perf_enhance_id = pistedisciplines[pistedisciplines["name"] == "CompPerfEnhance"]["id"].iloc[0]
-    if comp_perf_enhance_id:
-        enhance_df = pd.DataFrame(fetch_all_rows("scoretables", select="*", discipline_id=comp_perf_enhance_id))
-        if not enhance_df.empty:
-            enhance_df = enhance_df.sort_values("result_min")
-            show_cols = ["category", "sex", "result_min", "result_max", "points"]
-            for col in show_cols:
-                if col not in enhance_df.columns:
-                    enhance_df[col] = None
-            enhance_df = enhance_df[show_cols]
-            st.dataframe(enhance_df)
-            st.download_button("📥 Leistungsentwicklung als CSV", enhance_df.to_csv(index=False, encoding='utf-8-sig'), file_name="leistungsentwicklung.csv", mime="text/csv")
-        else:
-            st.info("Keine Daten für CompPerfEnhance gefunden.")
-    else:
-        st.info("Disziplin 'CompPerfEnhance' nicht gefunden.")
-
-    # --- CompPerfPointsCalc (Wettkampf Performance) ---
-    st.subheader("🏅 Wettkampf Performance (CompPerfPointsCalc)")
-    comp_perf_points_id = None
-    if not pistedisciplines.empty:
-        comp_perf_points_id = pistedisciplines[pistedisciplines["name"] == "CompPerfPointsCalc"]["id"].iloc[0]
-    if comp_perf_points_id:
-        perf_points_df = pd.DataFrame(fetch_all_rows("scoretables", select="*", discipline_id=comp_perf_points_id))
-        if not perf_points_df.empty:
-            perf_points_df = perf_points_df.sort_values("result_min")
-            show_cols = ["category", "sex", "result_min", "result_max", "points"]
-            for col in show_cols:
-                if col not in perf_points_df.columns:
-                    perf_points_df[col] = None
-            perf_points_df = perf_points_df[show_cols]
-            st.dataframe(perf_points_df)
-            st.download_button("📥 Wettkampf Performance als CSV", perf_points_df.to_csv(index=False, encoding='utf-8-sig'), file_name="wettkampf_performance.csv", mime="text/csv")
-        else:
-            st.info("Keine Daten für CompPerfPointsCalc gefunden.")
-    else:
-        st.info("Disziplin 'CompPerfPointsCalc' nicht gefunden.")
-
-    # --- CompPerfQualityCalc (Sprung Qualität) ---
-    st.subheader("🤸 Sprung Qualität (CompPerfQualityCalc)")
-    comp_perf_quality_id = None
-    if not pistedisciplines.empty:
-        comp_perf_quality_id = pistedisciplines[pistedisciplines["name"] == "CompPerfQualityCalc"]["id"].iloc[0]
-    if comp_perf_quality_id:
-        perf_quality_df = pd.DataFrame(fetch_all_rows("scoretables", select="*", discipline_id=comp_perf_quality_id))
-        if not perf_quality_df.empty:
-            perf_quality_df = perf_quality_df.sort_values("result_min")
-            show_cols = ["category", "sex", "result_min", "result_max", "points"]
-            for col in show_cols:
-                if col not in perf_quality_df.columns:
-                    perf_quality_df[col] = None
-            perf_quality_df = perf_quality_df[show_cols]
-            st.dataframe(perf_quality_df)
-            st.download_button("📥 Sprung Qualität als CSV", perf_quality_df.to_csv(index=False, encoding='utf-8-sig'), file_name="sprung_qualitaet.csv", mime="text/csv")
-        else:
-            st.info("Keine Daten für CompPerfQualityCalc gefunden.")
-    else:
-        st.info("Disziplin 'CompPerfQualityCalc' nicht gefunden.")
-
-    # --- Total Points for Card ---
-    st.subheader("🏅 Total Points for Card (pisterefminpoints)")
-    cardpoints_df = pd.DataFrame(fetch_all_rows("pisterefminpoints", select="*"))
-    if not cardpoints_df.empty:
-        cols = ["age", "points_max", "regio_min", "national_min"]
-        for col in cols:
-            if col not in cardpoints_df.columns:
-                cardpoints_df[col] = None
-        cardpoints_df = cardpoints_df[cols]
-        st.dataframe(cardpoints_df)
-        st.download_button("📥 Total Points for Card als CSV", cardpoints_df.to_csv(index=False, encoding='utf-8-sig'), file_name="total_points_for_card.csv", mime="text/csv")
-    else:
-        st.info("Keine Daten in pisterefminpoints (Total Points for Card).")
+        special_disciplines = [
+            ("🏅 Piste Points (PisteTotalinPoints)", "PisteTotalinPoints", "piste_totalinpoints"),
+            ("📈 Leistungsentwicklung (CompPerfEnhance)", "CompPerfEnhance", "comp_perf_enhance"),
+            ("🏅 Wettkampf Performance (CompPerfPointsCalc)", "CompPerfPointsCalc", "comp_perf_points"),
+            ("🤸 Sprung Qualität (CompPerfQualityCalc)", "CompPerfQualityCalc", "comp_perf_quality"),
+        ]
+        for title, disc_name, key_prefix in special_disciplines:
+            matches = pistedisciplines[pistedisciplines["name"] == disc_name]
+            if matches.empty:
+                st.info(f"Disziplin '{disc_name}' nicht gefunden.")
+                continue
+            discipline_id = matches["id"].iloc[0]
+            _render_inline_table(
+                title=title,
+                table_name="scoretables",
+                columns=["id", "discipline_name", "discipline_id", "category", "sex", "result_min", "result_max", "points"],
+                persist_columns=["id", "discipline_id", "category", "sex", "result_min", "result_max", "points"],
+                disabled_cols=["id", "discipline_name", "discipline_id"],
+                hidden_cols=["id", "discipline_id"],
+                preprocess_fn=_add_discipline_name,
+                key_prefix=key_prefix,
+                filters={"discipline_id": discipline_id},
+                int_id=False,
+                sort_by=["category", "sex", "result_min"],
+            )
 
 def athleten_eingeben():
     st.header("📝 Neuen Athleten hinzufügen")
