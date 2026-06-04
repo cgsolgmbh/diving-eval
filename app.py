@@ -1009,98 +1009,96 @@ def manage_pisteresults_correction():
     selected_discipline = st.selectbox("Disziplin", [""] + disciplines_in_athlete, index=0)
     if not selected_discipline:
         st.info("Bitte zuerst eine Disziplin auswählen.")
-        return
-
-    df_target = df_ath[df_ath["discipline_name"] == selected_discipline].copy()
-    if df_target.empty:
-        st.info("Kein passender Eintrag gefunden.")
-        return
-
-    if len(df_target) > 1:
-        row_options = [
-            f"id={row.get('id')} | raw={row.get('raw_result')} | points={row.get('points')}"
-            for _, row in df_target.iterrows()
-        ]
-        selected_row = st.selectbox("Eintrag", row_options)
-        selected_id = int(str(selected_row).split("|")[0].replace("id=", "").strip())
-        current = df_target[df_target["id"] == selected_id].iloc[0]
     else:
-        current = df_target.iloc[0]
-
-    athlete_id = current.get("athlete_id")
-    athlete_data = athlete_by_id.get(athlete_id, {})
-    sex = athlete_data.get("sex") or current.get("sex")
-    vintage = athlete_data.get("vintage")
-    category = get_category_from_testyear(vintage, selected_year) if vintage else current.get("category")
-
-    st.caption(
-        f"Aktuell: raw_result={current.get('raw_result')}, points={current.get('points')}, category={current.get('category')}, sex={current.get('sex')}"
-    )
-
-    all_disciplines = sorted(set([d.get("name") for d in disciplines if d.get("name")]))
-    current_discipline_name = str(current.get("discipline_name") or "")
-    if current_discipline_name and current_discipline_name not in all_disciplines:
-        all_disciplines.append(current_discipline_name)
-        all_disciplines = sorted(all_disciplines)
-
-    new_discipline_name = st.selectbox(
-        "Neue Disziplin",
-        all_disciplines,
-        index=all_disciplines.index(current_discipline_name) if current_discipline_name in all_disciplines else 0,
-    )
-    new_raw_result = st.text_input("Neuer raw_result", value=str(current.get("raw_result") or ""))
-
-    discipline_id_map = {d.get("name"): d.get("id") for d in disciplines if d.get("name") and d.get("id")}
-
-    if st.button("💾 Speichern"):
-        if not new_raw_result or not str(new_raw_result).strip():
-            st.error("Bitte einen gültigen raw_result eingeben.")
-            return
-
-        new_discipline_id = discipline_id_map.get(new_discipline_name)
-        if not new_discipline_id:
-            st.error("Die gewählte Disziplin konnte nicht zugeordnet werden.")
-            return
-
-        raw_str = str(new_raw_result).strip()
-        if raw_str == "9999":
-            raw_to_store = 9999
-            points = 0
+        df_target = df_ath[df_ath["discipline_name"] == selected_discipline].copy()
+        if df_target.empty:
+            st.info("Kein passender Eintrag gefunden.")
         else:
-            try:
-                raw_to_store = float(raw_str)
-            except Exception:
-                st.error("raw_result muss numerisch sein (oder 9999).")
-                return
-
-            excluded_ids = {
-                "640260ec-a094-462d-a69e-d91bbe35d94c",
-                "5906836a-24aa-40e1-a71f-614a7ea4a825",
-                "7eb062f7-3329-4cde-8875-bd6fd362137b",
-            }
-            if new_discipline_id in excluded_ids:
-                points = 0
+            if len(df_target) > 1:
+                row_options = [
+                    f"id={row.get('id')} | raw={row.get('raw_result')} | points={row.get('points')}"
+                    for _, row in df_target.iterrows()
+                ]
+                selected_row = st.selectbox("Eintrag", row_options)
+                selected_id = int(str(selected_row).split("|")[0].replace("id=", "").strip())
+                current = df_target[df_target["id"] == selected_id].iloc[0]
             else:
-                points = get_points(new_discipline_id, raw_to_store, category, sex)
+                current = df_target.iloc[0]
 
-        db.table_update(
-            "pisteresults",
-            {
-                "discipline_id": new_discipline_id,
-                "raw_result": raw_to_store,
-                "points": points,
-                "category": category,
-                "sex": sex,
-            },
-            id=current.get("id"),
-        )
-        st.success("Eintrag aktualisiert.")
-        st.rerun()
+            athlete_id = current.get("athlete_id")
+            athlete_data = athlete_by_id.get(athlete_id, {})
+            sex = athlete_data.get("sex") or current.get("sex")
+            vintage = athlete_data.get("vintage")
+            category = get_category_from_testyear(vintage, selected_year) if vintage else current.get("category")
 
-    if st.button("🗑️ Eintrag löschen"):
-        db.table_delete("pisteresults", id=current.get("id"))
-        st.warning("Eintrag gelöscht.")
-        st.rerun()
+            st.caption(
+                f"Aktuell: raw_result={current.get('raw_result')}, points={current.get('points')}, category={current.get('category')}, sex={current.get('sex')}"
+            )
+
+            all_disciplines = sorted(set([d.get("name") for d in disciplines if d.get("name")]))
+            current_discipline_name = str(current.get("discipline_name") or "")
+            if current_discipline_name and current_discipline_name not in all_disciplines:
+                all_disciplines.append(current_discipline_name)
+                all_disciplines = sorted(all_disciplines)
+
+            new_discipline_name = st.selectbox(
+                "Neue Disziplin",
+                all_disciplines,
+                index=all_disciplines.index(current_discipline_name) if current_discipline_name in all_disciplines else 0,
+            )
+            new_raw_result = st.text_input("Neuer raw_result", value=str(current.get("raw_result") or ""))
+
+            discipline_id_map = {d.get("name"): d.get("id") for d in disciplines if d.get("name") and d.get("id")}
+
+            if st.button("💾 Speichern"):
+                if not new_raw_result or not str(new_raw_result).strip():
+                    st.error("Bitte einen gültigen raw_result eingeben.")
+                    return
+
+                new_discipline_id = discipline_id_map.get(new_discipline_name)
+                if not new_discipline_id:
+                    st.error("Die gewählte Disziplin konnte nicht zugeordnet werden.")
+                    return
+
+                raw_str = str(new_raw_result).strip()
+                if raw_str == "9999":
+                    raw_to_store = 9999
+                    points = 0
+                else:
+                    try:
+                        raw_to_store = float(raw_str)
+                    except Exception:
+                        st.error("raw_result muss numerisch sein (oder 9999).")
+                        return
+
+                    excluded_ids = {
+                        "640260ec-a094-462d-a69e-d91bbe35d94c",
+                        "5906836a-24aa-40e1-a71f-614a7ea4a825",
+                        "7eb062f7-3329-4cde-8875-bd6fd362137b",
+                    }
+                    if new_discipline_id in excluded_ids:
+                        points = 0
+                    else:
+                        points = get_points(new_discipline_id, raw_to_store, category, sex)
+
+                db.table_update(
+                    "pisteresults",
+                    {
+                        "discipline_id": new_discipline_id,
+                        "raw_result": raw_to_store,
+                        "points": points,
+                        "category": category,
+                        "sex": sex,
+                    },
+                    id=current.get("id"),
+                )
+                st.success("Eintrag aktualisiert.")
+                st.rerun()
+
+            if st.button("🗑️ Eintrag löschen"):
+                db.table_delete("pisteresults", id=current.get("id"))
+                st.warning("Eintrag gelöscht.")
+                st.rerun()
 
     st.markdown("---")
     st.subheader("Treffer für Jahr/Athlet")
@@ -4461,13 +4459,125 @@ def referenztabellen_anzeigen():
     st.subheader("🎯 Selectionpoints")
     sel_df = pd.DataFrame(fetch_all_rows("selectionpoints", select="*"))
     if not sel_df.empty:
-        show_cols = ["Competition", "year", "category", "Discipline", "sex", "points"]
+        show_cols = ["id", "Competition", "year", "category", "Discipline", "sex", "points", "difficulty"]
         for col in show_cols:
             if col not in sel_df.columns:
                 sel_df[col] = None
-        sel_df = sel_df[show_cols]
+        sel_df = sel_df[show_cols].sort_values(["Competition", "year", "category", "Discipline", "sex"]) 
         st.dataframe(sel_df)
         st.download_button("📥 Selectionpoints als CSV", sel_df.to_csv(index=False, encoding='utf-8-sig'), file_name="selectionpoints.csv", mime="text/csv")
+
+        st.markdown("---")
+        st.subheader("✏️ Selectionpoints bearbeiten")
+
+        competitions = sorted({str(v).strip() for v in sel_df["Competition"].dropna().tolist() if str(v).strip()})
+        years = sorted({str(v).strip() for v in sel_df["year"].dropna().tolist() if str(v).strip()})
+
+        selected_comp = st.selectbox("Competition filtern", ["Alle"] + competitions, key="sel_edit_comp")
+        selected_year = st.selectbox("Year filtern", ["Alle"] + years, key="sel_edit_year")
+
+        filtered_sel = sel_df.copy()
+        if selected_comp != "Alle":
+            filtered_sel = filtered_sel[filtered_sel["Competition"].astype(str).str.strip() == selected_comp]
+        if selected_year != "Alle":
+            filtered_sel = filtered_sel[filtered_sel["year"].astype(str).str.strip() == selected_year]
+
+        if "sel_pending_delete_id" not in st.session_state:
+            st.session_state["sel_pending_delete_id"] = None
+
+        if filtered_sel.empty:
+            st.info("Keine Selectionpoints für den gewählten Filter.")
+        else:
+            for _, row in filtered_sel.iterrows():
+                row_id = row.get("id")
+                row_title = (
+                    f"id={row_id} | {row.get('Competition')} {row.get('year')} | "
+                    f"{row.get('category')} | {row.get('Discipline')} | {row.get('sex')}"
+                )
+                with st.expander(row_title):
+                    new_comp = st.text_input("Competition", value=str(row.get("Competition") or ""), key=f"sel_comp_{row_id}")
+                    new_year = st.text_input("Year", value=str(row.get("year") or ""), key=f"sel_year_{row_id}")
+                    new_cat = st.text_input("Category", value=str(row.get("category") or ""), key=f"sel_cat_{row_id}")
+                    new_disc = st.text_input("Discipline", value=str(row.get("Discipline") or ""), key=f"sel_disc_{row_id}")
+                    new_sex = st.selectbox(
+                        "Sex",
+                        ["female", "male"],
+                        index=0 if str(row.get("sex") or "").strip().lower() == "female" else 1,
+                        key=f"sel_sex_{row_id}",
+                    )
+                    new_points = st.text_input("Points", value=str(row.get("points") or ""), key=f"sel_points_{row_id}")
+                    new_difficulty = st.text_input("Difficulty", value=str(row.get("difficulty") or ""), key=f"sel_diff_{row_id}")
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("💾 Speichern", key=f"sel_save_{row_id}"):
+                            db.table_update(
+                                "selectionpoints",
+                                {
+                                    "Competition": new_comp.strip(),
+                                    "year": new_year.strip(),
+                                    "category": new_cat.strip(),
+                                    "Discipline": new_disc.strip(),
+                                    "sex": new_sex.strip(),
+                                    "points": new_points.strip(),
+                                    "difficulty": new_difficulty.strip(),
+                                },
+                                id=int(row_id),
+                            )
+                            st.success("Selectionpoint aktualisiert.")
+                            st.rerun()
+                    with col2:
+                        if st.button("🗑️ Löschen", key=f"sel_delete_{row_id}"):
+                            st.session_state["sel_pending_delete_id"] = int(row_id)
+
+                        if st.session_state.get("sel_pending_delete_id") == int(row_id):
+                            st.warning("Bitte Löschen bestätigen.")
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                if st.button("✅ Löschen bestätigen", key=f"sel_delete_confirm_{row_id}"):
+                                    db.table_delete("selectionpoints", id=int(row_id))
+                                    st.session_state["sel_pending_delete_id"] = None
+                                    st.warning("Selectionpoint gelöscht.")
+                                    st.rerun()
+                            with c2:
+                                if st.button("Abbrechen", key=f"sel_delete_cancel_{row_id}"):
+                                    st.session_state["sel_pending_delete_id"] = None
+                                    st.rerun()
+
+        st.markdown("---")
+        st.subheader("➕ Neuen Selectionpoint hinzufügen")
+        new_comp_add = st.text_input("Competition (neu)", value="JEM", key="sel_add_comp")
+        new_year_add = st.text_input("Year (neu)", value=str(datetime.date.today().year), key="sel_add_year")
+        new_cat_add = st.text_input("Category (neu)", key="sel_add_cat")
+        new_disc_add = st.text_input("Discipline (neu)", key="sel_add_disc")
+        new_sex_add = st.selectbox("Sex (neu)", ["female", "male"], key="sel_add_sex")
+        new_points_add = st.text_input("Points (neu)", key="sel_add_points")
+        new_diff_add = st.text_input("Difficulty (neu)", key="sel_add_diff")
+
+        if st.button("➕ Selectionpoint speichern", key="sel_add_save"):
+            if not new_cat_add.strip() or not new_disc_add.strip() or not new_points_add.strip():
+                st.error("Bitte mindestens Category, Discipline und Points ausfüllen.")
+            else:
+                try:
+                    next_id = int(pd.to_numeric(sel_df["id"], errors="coerce").max()) + 1
+                except Exception:
+                    next_id = 1
+
+                db.table_insert(
+                    "selectionpoints",
+                    {
+                        "id": next_id,
+                        "Competition": new_comp_add.strip(),
+                        "year": new_year_add.strip(),
+                        "category": new_cat_add.strip(),
+                        "Discipline": new_disc_add.strip(),
+                        "sex": new_sex_add.strip(),
+                        "points": new_points_add.strip(),
+                        "difficulty": new_diff_add.strip(),
+                    },
+                )
+                st.success(f"Selectionpoint mit id={next_id} hinzugefügt.")
+                st.rerun()
     else:
         st.info("Keine Daten in selectionpoints.")
 
