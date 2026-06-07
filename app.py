@@ -4445,6 +4445,12 @@ def referenztabellen_anzeigen():
     def _norm(v):
         if pd.isna(v):
             return None
+        if isinstance(v, pd.Timestamp):
+            return v.date().isoformat()
+        if isinstance(v, datetime.datetime):
+            return v.date().isoformat()
+        if isinstance(v, datetime.date):
+            return v.isoformat()
         if isinstance(v, str):
             s = v.strip()
             return s if s else None
@@ -4558,6 +4564,27 @@ def referenztabellen_anzeigen():
         key_prefix="selectionpoints",
         int_id=True,
         sort_by=["Competition", "year", "category", "Discipline", "sex"],
+    )
+
+    _render_inline_table(
+        title="🏟️ Wettkämpfe (Competitions)",
+        table_name="competitions",
+        columns=[
+            "id",
+            "Name",
+            "Date",
+            "PisteYear",
+            "Type",
+            "qual-Regional",
+            "qual-National",
+            "qual-JEM",
+            "qual-EM",
+            "qual-WM",
+            "qual-Piste",
+        ],
+        key_prefix="competitions",
+        int_id=True,
+        sort_by=["Date", "Name"],
     )
 
     _render_inline_table(
