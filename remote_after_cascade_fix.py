@@ -1855,23 +1855,6 @@ def bewertung_wettkampf():
                 (df_selection['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
                 (df_selection['category'].astype(str).str.strip().str.lower() == str(category).strip().lower())
             ]
-            if relevant_selection.empty:
-                missing_selection_combos.append({
-                    "sex": str(sex),
-                    "Discipline": str(discipline),
-                    "CategoryStart": str(category),
-                })
-
-            jem_qual = bool(comp_row.get("qual-JEM", False))
-            em_qual = bool(comp_row.get("qual-EM", False))
-            wm_qual = bool(comp_row.get("qual-WM", False))
-            regional_qual = bool(comp_row.get("qual-Regional", False))
-
-            excluded_synchro = (
-                str(category).strip().lower() in ["jugend c", "jugend d"] and
-                str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
-            )
-
             base_selection = relevant_selection
             if "year" in relevant_selection.columns:
                 by_piste = None

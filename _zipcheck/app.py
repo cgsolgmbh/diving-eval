@@ -53,38 +53,6 @@ def get_scoretables():
 def fetch_all_rows(table, select="*", **filters):
     return db.table_select(table, select, **filters)
 
-def cascade_competition_rename(old_name, new_name):
-    """Propagate a competition name change to name-based references."""
-    old_val = str(old_name or "").strip()
-    new_val = str(new_name or "").strip()
-    if not old_val or not new_val:
-        return {"compresults": 0, "pisterefcompresults": 0}
-    if old_val.lower() == new_val.lower():
-        return {"compresults": 0, "pisterefcompresults": 0}
-
-    updated_compresults = 0
-    updated_ref = 0
-
-    comp_rows = fetch_all_rows("compresults", select="id, Competition")
-    for row in comp_rows:
-        comp_name = str(row.get("Competition") or "").strip()
-        if comp_name.lower() == old_val.lower():
-            db.table_update("compresults", {"Competition": new_val}, id=int(row["id"]))
-            updated_compresults += 1
-
-    ref_rows = fetch_all_rows("pisterefcompresults", select="id, competition1, competition2, competition3")
-    for row in ref_rows:
-        payload = {}
-        for col in ["competition1", "competition2", "competition3"]:
-            val = str(row.get(col) or "").strip()
-            if val.lower() == old_val.lower():
-                payload[col] = new_val
-        if payload:
-            db.table_update("pisterefcompresults", payload, id=int(row["id"]))
-            updated_ref += 1
-
-    return {"compresults": updated_compresults, "pisterefcompresults": updated_ref}
-
 def read_uploaded_csv_with_fallback(uploaded_file, **kwargs):
     """Read uploaded CSV with common encoding fallbacks used by Excel exports."""
     encodings = ["utf-8-sig", "utf-8", "cp1252", "latin-1"]
@@ -1855,23 +1823,6 @@ def bewertung_wettkampf():
                 (df_selection['Discipline'].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
                 (df_selection['category'].astype(str).str.strip().str.lower() == str(category).strip().lower())
             ]
-            if relevant_selection.empty:
-                missing_selection_combos.append({
-                    "sex": str(sex),
-                    "Discipline": str(discipline),
-                    "CategoryStart": str(category),
-                })
-
-            jem_qual = bool(comp_row.get("qual-JEM", False))
-            em_qual = bool(comp_row.get("qual-EM", False))
-            wm_qual = bool(comp_row.get("qual-WM", False))
-            regional_qual = bool(comp_row.get("qual-Regional", False))
-
-            excluded_synchro = (
-                str(category).strip().lower() in ["jugend c", "jugend d"] and
-                str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
-            )
-
             base_selection = relevant_selection
             if "year" in relevant_selection.columns:
                 by_piste = None
@@ -2247,14 +2198,6 @@ def manage_compresults_entry():
             orig["id"] = orig["id"].apply(lambda x: None if pd.isna(x) else str(x))
             new["id"] = new["id"].apply(lambda x: None if pd.isna(x) else str(x))
 
-            orig_name_by_id = {}
-            if "Name" in orig.columns:
-                for _, orig_row in orig.iterrows():
-                    rid = orig_row.get("id")
-                    if rid:
-                        name_val = _norm_comp_value(orig_row.get("Name"))
-                        orig_name_by_id[str(rid)] = str(name_val or "").strip()
-
             orig_ids = {v for v in orig["id"].tolist() if v}
             new_ids = {v for v in new["id"].tolist() if v}
 
@@ -2270,8 +2213,6 @@ def manage_compresults_entry():
             next_id = (max(int_existing) + 1) if int_existing else 1
 
             persist_cols = [c for c in comp_cols if c != "id"]
-            cascade_compresults_total = 0
-            cascade_ref_total = 0
             for _, row in new.iterrows():
                 row_id = row.get("id")
                 payload = {c: _norm_comp_value(row.get(c)) for c in persist_cols}
@@ -2290,18 +2231,7 @@ def manage_compresults_entry():
                 else:
                     db.table_update("competitions", payload, id=int(row_id))
 
-                    old_name = orig_name_by_id.get(str(row_id), "")
-                    new_name = str(_norm_comp_value(row.get("Name")) or "").strip()
-                    if old_name and new_name and old_name.lower() != new_name.lower():
-                        cascade_counts = cascade_competition_rename(old_name, new_name)
-                        cascade_compresults_total += cascade_counts["compresults"]
-                        cascade_ref_total += cascade_counts["pisterefcompresults"]
-
-            st.success(
-                f"Wettkämpfe gespeichert. Verknüpfungen aktualisiert: "
-                f"compresults={cascade_compresults_total}, "
-                f"pisterefcompresults={cascade_ref_total}."
-            )
+            st.success("Wettkämpfe gespeichert.")
             st.rerun()
 
     # --- Neuer Wettkampf anlegen ---
@@ -4665,14 +4595,6 @@ def referenztabellen_anzeigen():
             orig["id"] = orig["id"].apply(lambda x: None if pd.isna(x) else str(x))
             new["id"] = new["id"].apply(lambda x: None if pd.isna(x) else str(x))
 
-            orig_name_by_id = {}
-            if table_name == "competitions" and "Name" in orig.columns:
-                for _, orig_row in orig.iterrows():
-                    rid = orig_row.get("id")
-                    if rid:
-                        name_val = _norm(orig_row.get("Name"))
-                        orig_name_by_id[str(rid)] = str(name_val or "").strip()
-
             orig_ids = {v for v in orig["id"].tolist() if v}
             new_ids = {v for v in new["id"].tolist() if v}
 
@@ -4687,9 +4609,6 @@ def referenztabellen_anzeigen():
                     except Exception:
                         pass
                 next_id = (max(int_existing) + 1) if int_existing else 1
-
-            cascade_compresults_total = 0
-            cascade_ref_total = 0
 
             for _, row in new.iterrows():
                 row_id = row.get("id")
@@ -4712,22 +4631,7 @@ def referenztabellen_anzeigen():
                 else:
                     db.table_update(table_name, payload, id=int(row_id) if int_id else row_id)
 
-                    if table_name == "competitions":
-                        old_name = orig_name_by_id.get(str(row_id), "")
-                        new_name = str(_norm(row.get("Name")) or "").strip()
-                        if old_name and new_name and old_name.lower() != new_name.lower():
-                            cascade_counts = cascade_competition_rename(old_name, new_name)
-                            cascade_compresults_total += cascade_counts["compresults"]
-                            cascade_ref_total += cascade_counts["pisterefcompresults"]
-
-            if table_name == "competitions":
-                st.success(
-                    f"{title} gespeichert. Verknüpfungen aktualisiert: "
-                    f"compresults={cascade_compresults_total}, "
-                    f"pisterefcompresults={cascade_ref_total}."
-                )
-            else:
-                st.success(f"{title} gespeichert.")
+            st.success(f"{title} gespeichert.")
             st.rerun()
 
     def _add_discipline_name(df):

@@ -1,0 +1,1 @@
+INSERT INTO "public"."team" ("id", "FullName", "ShortName") VALUES (1, 'Schwimmklub Thun', 'SKT'), (2, 'Schwimmklub Bern', 'SKBE'), (3, 'Verein Zürcher Wasserspringer', 'VZW'), (4, 'Fribourg Natation', 'FRI'), (5, 'Lausanne Aquatics', 'LA'), (6, 'Genève Natation', 'GEN'), (7, 'Red-Fish Neuchâtel', 'RFN');
