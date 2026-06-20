@@ -4655,6 +4655,31 @@ def selektionen_wettkaempfe():
         except Exception:
             return None
 
+    def _calc_limit_pct(result_row, limit_competition):
+        points_val = _safe_float(result_row.get("Points"))
+        if points_val is None:
+            return None, None
+
+        discipline = _norm_text(result_row.get("Discipline"))
+        sex = _norm_text(result_row.get("sex"))
+        category = _norm_text(result_row.get("CategoryStart"))
+
+        lim = df_selectionpoints[
+            (df_selectionpoints["Competition"].astype(str).str.strip().str.lower() == _norm_text(limit_competition))
+            & (df_selectionpoints["year"].astype(str).str.strip() == str(selected_year).strip())
+            & (df_selectionpoints["Discipline"].astype(str).str.strip().str.lower() == discipline)
+            & (df_selectionpoints["sex"].astype(str).str.strip().str.lower() == sex)
+            & (df_selectionpoints["category"].astype(str).str.strip().str.lower() == category)
+        ]
+        if lim.empty:
+            return None, None
+
+        limit_val = _safe_float(lim.iloc[0].get("points"))
+        if not limit_val:
+            return None, None
+
+        return limit_val, round((points_val / limit_val) * 100, 1)
+
     # Schneller: Jahre aus compresults + Mapping
     years = sorted(
         set(
@@ -4689,6 +4714,28 @@ def selektionen_wettkaempfe():
     df = pd.DataFrame(filtered)
     if not df.empty:
         df_show = df[show_cols]
+
+        if selected_tab in ["JEM", "EM"] and not df_selectionpoints.empty:
+            limits = []
+            pcts = []
+            states = []
+            for _, row in df_show.iterrows():
+                limit_val, pct = _calc_limit_pct(row, selected_tab)
+                limits.append(limit_val)
+                pcts.append(pct)
+                if pct is None:
+                    states.append("keine Limite")
+                elif pct >= 100:
+                    states.append(">=100%")
+                elif pct >= 90:
+                    states.append(">=90%")
+                else:
+                    states.append("<90%")
+
+            df_show[f"{selected_tab} Limite"] = limits
+            df_show["% zur Limite"] = pcts
+            df_show["Limite erreicht"] = states
+
         st.dataframe(df_show)
         st.download_button("📥 Ergebnisse als CSV herunterladen", df_show.to_csv(index=False, encoding='utf-8-sig'), file_name=f"{selected_tab}_{selected_year}.csv", mime="text/csv")
     else:
@@ -4737,28 +4784,17 @@ def selektionen_wettkaempfe():
             if points_val is None:
                 continue
 
-            discipline = _norm_text(r.get("Discipline"))
-            sex = _norm_text(r.get("sex"))
-            category = _norm_text(r.get("CategoryStart"))
-
-            lim = df_selectionpoints[
-                (df_selectionpoints["Competition"].astype(str).str.strip().str.lower() == selected_tab.lower())
-                & (df_selectionpoints["year"].astype(str).str.strip() == str(selected_year).strip())
-                & (df_selectionpoints["Discipline"].astype(str).str.strip().str.lower() == discipline)
-                & (df_selectionpoints["sex"].astype(str).str.strip().str.lower() == sex)
-                & (df_selectionpoints["category"].astype(str).str.strip().str.lower() == category)
-            ]
-
-            if lim.empty:
+            limit_val, pct = _calc_limit_pct(r, selected_tab)
+            if limit_val is None or pct is None:
                 continue
 
-            limit_val = _safe_float(lim.iloc[0].get("points"))
-            if not limit_val:
-                continue
-
-            pct = round((points_val / limit_val) * 100, 1)
             if pct < 90:
                 continue
+
+            if pct >= 100:
+                reached = ">=100%"
+            else:
+                reached = ">=90%"
 
             extra_rows.append({
                 "first_name": r.get("first_name"),
@@ -4770,6 +4806,7 @@ def selektionen_wettkaempfe():
                 "Points": points_val,
                 f"{selected_tab} Limite": limit_val,
                 "% zur Limite": pct,
+                "Limite erreicht": reached,
             })
 
         if extra_rows:
