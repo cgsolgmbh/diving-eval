@@ -2884,6 +2884,26 @@ def manage_compresults_correction():
     )
     new_points = st.number_input("Neue Punktzahl", min_value=0.0, step=0.1, format="%.2f", value=current_points)
     new_difficulty = st.number_input("Neue Difficulty", min_value=0.0, step=0.1, format="%.2f", value=current_difficulty)
+    current_id = int(current["id"])
+
+    st.markdown("---")
+    st.caption(f"Aktueller Eintrag: id={current_id}")
+    delete_confirmed = st.checkbox(
+        "Ich möchte diesen Eintrag dauerhaft löschen",
+        key=f"compresult_delete_confirm_{current_id}",
+    )
+    if st.button("🗑️ Eintrag löschen", key=f"compresult_delete_btn_{current_id}"):
+        if not delete_confirmed:
+            st.error("Bitte das Löschen zuerst bestätigen.")
+        else:
+            try:
+                db.table_delete("compresults", id=current_id)
+                st.success(f"Eintrag id={current_id} wurde gelöscht.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Löschen fehlgeschlagen: {e}")
+
+    st.markdown("---")
 
     if st.button("💾 Korrektur speichern"):
         competitions_data = fetch_all_rows('competitions', select='Name, Date, PisteYear, [qual-Regional], [qual-JEM], [qual-EM], [qual-WM]')
@@ -2923,8 +2943,8 @@ def manage_compresults_correction():
             "timestamp": None,
             **team_flags,
         }
-        db.table_update("compresults", update_payload, id=int(current["id"]))
-        st.success(f"Eintrag id={int(current['id'])} wurde korrigiert. timestamp wurde auf NULL gesetzt.")
+        db.table_update("compresults", update_payload, id=current_id)
+        st.success(f"Eintrag id={current_id} wurde korrigiert. timestamp wurde auf NULL gesetzt.")
         st.rerun()
 
 def safe_numeric(val):
