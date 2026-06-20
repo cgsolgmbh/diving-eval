@@ -4711,57 +4711,97 @@ def selektionen_wettkaempfe():
 
     # Anzeige-Spalten
     show_cols = ["first_name", "last_name", "sex", "CategoryStart", "Competition", "Discipline", "Points"]
+
+    def _pct_style(val):
+        if val in (None, "", "nan"):
+            return ""
+        try:
+            v = float(val)
+        except Exception:
+            return ""
+        if v >= 100:
+            return "background-color: #d1fae5; color: #065f46; font-weight: 600;"
+        if v >= 90:
+            return "background-color: #ffedd5; color: #9a3412; font-weight: 600;"
+        return "background-color: #f3f4f6; color: #374151;"
+
     df = pd.DataFrame(filtered)
-    if not df.empty:
-        df_show = df[show_cols]
+    if selected_tab in ["JEM", "EM"] and not df.empty:
+        yes_athletes = set(
+            (
+                _norm_text(r.get("first_name")),
+                _norm_text(r.get("last_name")),
+                _norm_text(r.get("sex")),
+            )
+            for _, r in df.iterrows()
+        )
 
-        if selected_tab in ["JEM", "EM"] and not df_selectionpoints.empty:
-            limits = []
-            pcts = []
-            states = []
-            lights = []
-            for _, row in df_show.iterrows():
-                limit_val, pct = _calc_limit_pct(row, selected_tab)
-                limits.append(limit_val)
-                pcts.append(pct)
-                if pct is None:
-                    states.append("keine Limite")
-                    lights.append("⚪")
-                elif pct >= 100:
-                    states.append(">=100%")
-                    lights.append("🟢")
-                elif pct >= 90:
-                    states.append(">=90%")
-                    lights.append("🟠")
-                else:
-                    states.append("<90%")
-                    lights.append("⚪")
+        integrated_rows = []
+        for r in filtered_year:
+            athlete_key = (
+                _norm_text(r.get("first_name")),
+                _norm_text(r.get("last_name")),
+                _norm_text(r.get("sex")),
+            )
+            if athlete_key not in yes_athletes:
+                continue
 
-            def _pct_style(val):
-                if val in (None, "", "nan"):
-                    return ""
-                try:
-                    v = float(val)
-                except Exception:
-                    return ""
-                if v >= 100:
-                    return "background-color: #d1fae5; color: #065f46; font-weight: 600;"
-                if v >= 90:
-                    return "background-color: #ffedd5; color: #9a3412; font-weight: 600;"
-                return "background-color: #f3f4f6; color: #374151;"
+            limit_val, pct = _calc_limit_pct(r, selected_tab)
+            is_yes = str(r.get(spalte, "")).lower() == "yes"
+            is_extra_90 = pct is not None and pct >= 90
 
-            df_show[f"{selected_tab} Limite"] = limits
-            df_show["% zur Limite"] = pcts
-            df_show["Limite erreicht"] = states
-            df_show.insert(0, "Ampel", lights)
+            # Hauptliste integriert: Selektion=yes ODER zusätzliche Disziplin >=90%
+            if not is_yes and not is_extra_90:
+                continue
 
+            if pct is None:
+                status = "keine Limite"
+                ampel = "⚪"
+            elif pct >= 100:
+                status = ">=100%"
+                ampel = "🟢"
+            elif pct >= 90:
+                status = ">=90%"
+                ampel = "🟠"
+            else:
+                status = "<90%"
+                ampel = "⚪"
+
+            integrated_rows.append({
+                "Ampel": ampel,
+                "Quelle": "Selektion yes" if is_yes else "Zusatz >=90%",
+                "first_name": r.get("first_name"),
+                "last_name": r.get("last_name"),
+                "sex": r.get("sex"),
+                "CategoryStart": r.get("CategoryStart"),
+                "Competition": r.get("Competition"),
+                "Discipline": r.get("Discipline"),
+                "Points": _safe_float(r.get("Points")),
+                f"{selected_tab} Limite": limit_val,
+                "% zur Limite": pct,
+                "Limite erreicht": status,
+            })
+
+        df_show = pd.DataFrame(integrated_rows)
+        if not df_show.empty:
+            key_cols = ["first_name", "last_name", "sex", "CategoryStart", "Competition", "Discipline"]
+            df_show = (
+                df_show.sort_values("% zur Limite", ascending=False, na_position="last")
+                .drop_duplicates(subset=key_cols, keep="first")
+                .sort_values(["last_name", "first_name", "Competition", "Discipline"])
+                .reset_index(drop=True)
+            )
             st.dataframe(df_show.style.map(_pct_style, subset=["% zur Limite"]))
+            st.download_button("📥 Ergebnisse als CSV herunterladen", df_show.to_csv(index=False, encoding='utf-8-sig'), file_name=f"{selected_tab}_{selected_year}.csv", mime="text/csv")
         else:
-            st.dataframe(df_show)
-
-        st.download_button("📥 Ergebnisse als CSV herunterladen", df_show.to_csv(index=False, encoding='utf-8-sig'), file_name=f"{selected_tab}_{selected_year}.csv", mime="text/csv")
+            st.info("Keine passenden Einträge gefunden.")
     else:
-        st.info("Keine passenden Einträge gefunden.")
+        if not df.empty:
+            df_show = df[show_cols]
+            st.dataframe(df_show)
+            st.download_button("📥 Ergebnisse als CSV herunterladen", df_show.to_csv(index=False, encoding='utf-8-sig'), file_name=f"{selected_tab}_{selected_year}.csv", mime="text/csv")
+        else:
+            st.info("Keine passenden Einträge gefunden.")
 
     # --- NEU: Einzigartige Liste (jede Person nur einmal) ---
     st.subheader("👤 Einzigartige Liste (jede Person nur einmal)")
@@ -4778,73 +4818,7 @@ def selektionen_wettkaempfe():
     else:
         st.info("Keine Einträge für die einzigartige Liste gefunden.")
 
-    # Zusatzliste für JEM/EM: weitere Wettkämpfe mit >=90% der jeweiligen Limite
-    if selected_tab in ["JEM", "EM"] and not df.empty and not df_selectionpoints.empty:
-        st.subheader(f"📈 Zusätzliche Wettkämpfe mit mindestens 90% der {selected_tab}-Limite")
-        st.caption("Für Athleten mit JEM/EM = yes werden alle Wettkämpfe im gewählten Jahr geprüft.")
-
-        yes_athletes = set(
-            (
-                _norm_text(r.get("first_name")),
-                _norm_text(r.get("last_name")),
-                _norm_text(r.get("sex")),
-            )
-            for _, r in df.iterrows()
-        )
-
-        extra_rows = []
-        for r in filtered_year:
-            athlete_key = (
-                _norm_text(r.get("first_name")),
-                _norm_text(r.get("last_name")),
-                _norm_text(r.get("sex")),
-            )
-            if athlete_key not in yes_athletes:
-                continue
-
-            points_val = _safe_float(r.get("Points"))
-            if points_val is None:
-                continue
-
-            limit_val, pct = _calc_limit_pct(r, selected_tab)
-            if limit_val is None or pct is None:
-                continue
-
-            if pct < 90:
-                continue
-
-            if pct >= 100:
-                reached = ">=100%"
-            else:
-                reached = ">=90%"
-
-            extra_rows.append({
-                "first_name": r.get("first_name"),
-                "last_name": r.get("last_name"),
-                "sex": r.get("sex"),
-                "CategoryStart": r.get("CategoryStart"),
-                "Competition": r.get("Competition"),
-                "Discipline": r.get("Discipline"),
-                "Points": points_val,
-                f"{selected_tab} Limite": limit_val,
-                "% zur Limite": pct,
-                "Limite erreicht": reached,
-            })
-
-        if extra_rows:
-            df_extra = pd.DataFrame(extra_rows)
-            idx = df_extra.groupby(["first_name", "last_name", "sex", "CategoryStart", "Competition"])["% zur Limite"].idxmax()
-            df_extra_unique_comp = df_extra.loc[idx].sort_values(["last_name", "first_name", "Competition"]).reset_index(drop=True)
-
-            st.dataframe(df_extra_unique_comp)
-            st.download_button(
-                "📥 Zusätzliche 90%-Wettkämpfe als CSV herunterladen",
-                df_extra_unique_comp.to_csv(index=False, encoding='utf-8-sig'),
-                file_name=f"{selected_tab}_{selected_year}_plus_90pct.csv",
-                mime="text/csv",
-            )
-        else:
-            st.info(f"Keine zusätzlichen Wettkämpfe mit >=90% der {selected_tab}-Limite gefunden.")
+    # Die frühere separate Zusatzliste ist in die Hauptliste integriert.
 
 def referenztabellen_anzeigen():
     st.header("📚 Referenz- und Bewertungstabellen")
