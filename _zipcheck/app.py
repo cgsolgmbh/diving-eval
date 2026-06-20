@@ -2292,7 +2292,19 @@ def manage_compresults_entry():
     selectionpoints_df = pd.DataFrame(selectionpoints)
     competitions_df = pd.DataFrame(competitions)
 
-    discipline = st.selectbox("Disziplin", ["1m", "3m", "platform", "3m synchro", "platform synchro"])
+    discipline = st.selectbox(
+        "Disziplin",
+        [
+            "1m",
+            "3m",
+            "platform",
+            "3m synchro",
+            "platform synchro",
+            "high diving",
+            "high diving 20m",
+            "high diving 27m",
+        ],
+    )
     category_start = st.selectbox("Kategorie", ["Jugend A", "Jugend B", "Jugend C", "Jugend D", "Elite"])
     prefin = st.selectbox("PreFin", ["FinalOnly", "Preliminary", "Final"])
     points = st.number_input("Punkte", min_value=0.0, step=0.1, format="%.2f")
@@ -2426,10 +2438,19 @@ def manage_compresults_entry():
         key="divelive_compresults_uploader",
     )
 
-    def _normalize_divelive_discipline(value: str) -> str:
+    def _normalize_divelive_discipline(value: str, category: str = "") -> str:
         s = str(value or "").strip().lower()
+        cat = str(category or "").strip().lower()
         if s == "":
             return ""
+        if "high" in s or "20m" in s or "27m" in s:
+            if "27" in s:
+                return "high diving 27m"
+            if "20" in s:
+                return "high diving 20m"
+            if cat in ["jugend a", "jugend b"]:
+                return "high diving"
+            return "high diving"
         if "platform" in s or "tower" in s or "turm" in s:
             return "platform"
         if s.startswith("1"):
@@ -2499,7 +2520,7 @@ def manage_compresults_entry():
                             skipped_dl.append({"first_name": first, "last_name": last, "reason": "Category fehlt"})
                             continue
 
-                        discipline_val = _normalize_divelive_discipline(row[cols_by_lower["event_height"]])
+                        discipline_val = _normalize_divelive_discipline(row[cols_by_lower["event_height"]], category=category)
                         if str(discipline_val).strip() == "":
                             skipped_dl.append({"first_name": first, "last_name": last, "reason": "event_height/Discipline fehlt"})
                             continue
@@ -2665,7 +2686,20 @@ def manage_compresults_correction():
         }
     )
     discipline_options = sorted(
-        set(["1m", "3m", "platform", "3m synchro", "platform synchro"] + all_discipline_values + [current_discipline])
+        set(
+            [
+                "1m",
+                "3m",
+                "platform",
+                "3m synchro",
+                "platform synchro",
+                "high diving",
+                "high diving 20m",
+                "high diving 27m",
+            ]
+            + all_discipline_values
+            + [current_discipline]
+        )
     )
     category_options = ["Jugend A", "Jugend B", "Jugend C", "Jugend D", "Elite"]
     prefin_options = ["FinalOnly", "Preliminary", "Final"]
