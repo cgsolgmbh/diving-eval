@@ -4755,16 +4755,12 @@ def selektionen_wettkaempfe():
                 continue
 
             if pct is None:
-                status = "keine Limite"
                 ampel = "⚪"
             elif pct >= 100:
-                status = ">=100%"
                 ampel = "🟢"
             elif pct >= 90:
-                status = ">=90%"
                 ampel = "🟠"
             else:
-                status = "<90%"
                 ampel = "⚪"
 
             integrated_rows.append({
@@ -4779,7 +4775,6 @@ def selektionen_wettkaempfe():
                 "Points": _safe_float(r.get("Points")),
                 f"{selected_tab} Limite": limit_val,
                 "% zur Limite": pct,
-                "Limite erreicht": status,
             })
 
         df_show = pd.DataFrame(integrated_rows)
@@ -4791,8 +4786,44 @@ def selektionen_wettkaempfe():
                 .sort_values(["last_name", "first_name", "Competition", "Discipline"])
                 .reset_index(drop=True)
             )
-            st.dataframe(df_show.style.map(_pct_style, subset=["% zur Limite"]))
-            st.download_button("📥 Ergebnisse als CSV herunterladen", df_show.to_csv(index=False, encoding='utf-8-sig'), file_name=f"{selected_tab}_{selected_year}.csv", mime="text/csv")
+
+            # Zusatzfilter für die integrierte JEM/EM-Tabelle
+            st.subheader("🔎 Tabellenfilter")
+            col_f1, col_f2, col_f3 = st.columns(3)
+            with col_f1:
+                first_filter = st.text_input("Vorname enthält", key=f"sel_{selected_tab}_first_filter")
+            with col_f2:
+                last_filter = st.text_input("Nachname enthält", key=f"sel_{selected_tab}_last_filter")
+            with col_f3:
+                threshold_filter = st.selectbox(
+                    "Schwelle",
+                    ["Alle", ">=100%", "nur 90% bis <100%"],
+                    key=f"sel_{selected_tab}_threshold_filter",
+                )
+
+            categories = sorted([c for c in df_show["CategoryStart"].dropna().astype(str).unique().tolist() if c.strip()])
+            selected_categories = st.multiselect(
+                "Kategorie",
+                categories,
+                default=categories,
+                key=f"sel_{selected_tab}_category_filter",
+            )
+
+            df_filtered_show = df_show.copy()
+            if first_filter:
+                df_filtered_show = df_filtered_show[df_filtered_show["first_name"].astype(str).str.contains(first_filter, case=False, na=False)]
+            if last_filter:
+                df_filtered_show = df_filtered_show[df_filtered_show["last_name"].astype(str).str.contains(last_filter, case=False, na=False)]
+            if selected_categories:
+                df_filtered_show = df_filtered_show[df_filtered_show["CategoryStart"].astype(str).isin(selected_categories)]
+            if threshold_filter == ">=100%":
+                df_filtered_show = df_filtered_show[pd.to_numeric(df_filtered_show["% zur Limite"], errors="coerce") >= 100]
+            elif threshold_filter == "nur 90% bis <100%":
+                pct_num = pd.to_numeric(df_filtered_show["% zur Limite"], errors="coerce")
+                df_filtered_show = df_filtered_show[(pct_num >= 90) & (pct_num < 100)]
+
+            st.dataframe(df_filtered_show.style.map(_pct_style, subset=["% zur Limite"]))
+            st.download_button("📥 Ergebnisse als CSV herunterladen", df_filtered_show.to_csv(index=False, encoding='utf-8-sig'), file_name=f"{selected_tab}_{selected_year}.csv", mime="text/csv")
         else:
             st.info("Keine passenden Einträge gefunden.")
     else:
