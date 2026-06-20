@@ -13,6 +13,29 @@ import base64
 
 st.set_page_config(page_title="Diving Evaluation", page_icon="🤿")
 
+
+def get_app_version():
+    """Return a human-readable runtime version for live verification."""
+    env_version = os.getenv("APP_VERSION")
+    if env_version:
+        return str(env_version).strip()
+
+    version_file = os.path.join(os.path.dirname(__file__), ".app_version")
+    if os.path.exists(version_file):
+        try:
+            with open(version_file, "r", encoding="utf-8") as f:
+                value = f.read().strip()
+                if value:
+                    return value
+        except Exception:
+            pass
+
+    try:
+        mtime = datetime.datetime.utcfromtimestamp(os.path.getmtime(__file__))
+        return f"local-{mtime.strftime('%Y%m%d-%H%M%S')}"
+    except Exception:
+        return "local-unknown"
+
 # Auth handled by login_view()
 # --- Caching für selten geänderte Tabellen ---
 @st.cache_data
@@ -5108,6 +5131,7 @@ def main():
         "Referenz- und Bewertungstabellen"
     ]
     st.sidebar.title("🏠 Navigation")
+    st.sidebar.caption(f"Version: {get_app_version()}")
     selected = st.sidebar.radio("Wähle eine Seite", menu, index=menu.index(st.session_state["page"]))
     if selected != st.session_state["page"]:
         st.session_state["page"] = selected

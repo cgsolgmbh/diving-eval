@@ -37,6 +37,9 @@ jobs:
           cp app.py db.py requirements.txt startup.sh deploy_package/
           cp -R sqltables deploy_package/sqltables
 
+          VERSION="$(git rev-parse --short HEAD)-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          echo "$VERSION" > deploy_package/.app_version
+
           if [ -d .streamlit ]; then
             mkdir -p deploy_package/.streamlit
             if [ -f .streamlit/config.toml ]; then
