@@ -4719,24 +4719,46 @@ def selektionen_wettkaempfe():
             limits = []
             pcts = []
             states = []
+            lights = []
             for _, row in df_show.iterrows():
                 limit_val, pct = _calc_limit_pct(row, selected_tab)
                 limits.append(limit_val)
                 pcts.append(pct)
                 if pct is None:
                     states.append("keine Limite")
+                    lights.append("⚪")
                 elif pct >= 100:
                     states.append(">=100%")
+                    lights.append("🟢")
                 elif pct >= 90:
                     states.append(">=90%")
+                    lights.append("🟠")
                 else:
                     states.append("<90%")
+                    lights.append("⚪")
+
+            def _pct_style(val):
+                if val in (None, "", "nan"):
+                    return ""
+                try:
+                    v = float(val)
+                except Exception:
+                    return ""
+                if v >= 100:
+                    return "background-color: #d1fae5; color: #065f46; font-weight: 600;"
+                if v >= 90:
+                    return "background-color: #ffedd5; color: #9a3412; font-weight: 600;"
+                return "background-color: #f3f4f6; color: #374151;"
 
             df_show[f"{selected_tab} Limite"] = limits
             df_show["% zur Limite"] = pcts
             df_show["Limite erreicht"] = states
+            df_show.insert(0, "Ampel", lights)
 
-        st.dataframe(df_show)
+            st.dataframe(df_show.style.map(_pct_style, subset=["% zur Limite"]))
+        else:
+            st.dataframe(df_show)
+
         st.download_button("📥 Ergebnisse als CSV herunterladen", df_show.to_csv(index=False, encoding='utf-8-sig'), file_name=f"{selected_tab}_{selected_year}.csv", mime="text/csv")
     else:
         st.info("Keine passenden Einträge gefunden.")
