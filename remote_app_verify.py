@@ -496,6 +496,104 @@ def _extract_year_from_text(text):
     except Exception:
         return None
 
+
+def _category_group_from_start(category_start):
+    c = _norm_str(category_start)
+    if c.startswith("jugend"):
+        return "jugend"
+    if c == "elite":
+        return "elite"
+    return "all"
+
+
+def _safe_percent_value(val, fallback=None):
+    try:
+        if val in (None, "", "nan"):
+            return fallback
+        if isinstance(val, str):
+            s = val.replace("%", "").replace(",", ".").strip()
+            if s == "":
+                return fallback
+            return float(s)
+        return float(val)
+    except Exception:
+        return fallback
+
+
+def ensure_kaderthresholds_table():
+    """Seed threshold rows in existing socadditionalvalues table (no CREATE TABLE rights required)."""
+    existing = fetch_all_rows(
+        "socadditionalvalues",
+        select="id, first_name, last_name",
+        toolenvironment="kaderthresholds",
+    )
+    existing_keys = {
+        (_norm_str(r.get("first_name")), _norm_str(r.get("last_name")))
+        for r in (existing or [])
+    }
+
+    defaults = [
+        {"discipline": "default", "category_group": "all", "national_percent": "90", "regional_percent": "70", "notes": "Fallback für alle Disziplinen"},
+        {"discipline": "high diving", "category_group": "all", "national_percent": "90", "regional_percent": "70", "notes": "High Diving gesamt"},
+        {"discipline": "high diving", "category_group": "jugend", "national_percent": "90", "regional_percent": "70", "notes": "High Diving Jugend"},
+        {"discipline": "high diving", "category_group": "elite", "national_percent": "90", "regional_percent": "70", "notes": "High Diving Elite"},
+        {"discipline": "high diving 20m", "category_group": "all", "national_percent": "90", "regional_percent": "70", "notes": "High Diving 20m"},
+        {"discipline": "high diving 27m", "category_group": "all", "national_percent": "90", "regional_percent": "70", "notes": "High Diving 27m"},
+    ]
+
+    for row in defaults:
+        key = (_norm_str(row["discipline"]), _norm_str(row["category_group"]))
+        if key not in existing_keys:
+            db.table_insert(
+                "socadditionalvalues",
+                {
+                    "toolenvironment": "kaderthresholds",
+                    "PisteYear": "global",
+                    "first_name": row["discipline"],
+                    "last_name": row["category_group"],
+                    "CompPointsNationalTeam": row["national_percent"],
+                    "CompPointsRegionalTeam": row["regional_percent"],
+                    "quality": row["notes"],
+                },
+            )
+
+
+def load_kader_threshold_rules():
+    try:
+        ensure_kaderthresholds_table()
+        rows = fetch_all_rows(
+            "socadditionalvalues",
+            select="first_name, last_name, CompPointsNationalTeam, CompPointsRegionalTeam",
+            toolenvironment="kaderthresholds",
+        )
+    except Exception:
+        return {}
+
+    rules = {}
+    for r in rows or []:
+        key = (_norm_str(r.get("first_name")), _norm_str(r.get("last_name")) or "all")
+        rules[key] = {
+            "national": _safe_percent_value(r.get("CompPointsNationalTeam"), None),
+            "regional": _safe_percent_value(r.get("CompPointsRegionalTeam"), None),
+        }
+    return rules
+
+
+def resolve_kader_thresholds(discipline, category_start, rules=None):
+    rules = rules if rules is not None else load_kader_threshold_rules()
+    d = _norm_str(discipline)
+    group = _category_group_from_start(category_start)
+
+    for key in [(d, group), (d, "all"), ("default", group), ("default", "all")]:
+        if key not in rules:
+            continue
+        r = rules[key]
+        national = _safe_percent_value(r.get("national"), NATIONAL_TEAM_MIN_PERCENT)
+        regional = _safe_percent_value(r.get("regional"), REGIONAL_TEAM_MIN_PERCENT)
+        return national, regional
+
+    return float(NATIONAL_TEAM_MIN_PERCENT), float(REGIONAL_TEAM_MIN_PERCENT)
+
 def compute_compresult_team_flags(
     *,
     competition_name,
@@ -528,6 +626,8 @@ def compute_compresult_team_flags(
     points_val = safe_float(points)
     if points_val is None:
         return {"NationalTeam": "no", "RegionalTeam": "no"}
+
+    national_threshold, regional_threshold = resolve_kader_thresholds(discipline, category_start)
 
     comp_row = {}
     piste_year = None
@@ -582,7 +682,7 @@ def compute_compresult_team_flags(
             return "no", "", "no"
         percentage = round((float(pts) / float(limit)) * 100, 1)
         status = "yes" if bool(qual_flag) and float(pts) >= float(limit) else "no"
-        national = "yes" if percentage >= NATIONAL_TEAM_MIN_PERCENT else "no"
+        national = "yes" if percentage >= float(national_threshold) else "no"
         return status, f"{percentage}%", national
 
     # NationalTeam is derived from the selection thresholds (JEM/EM/WM)
@@ -627,7 +727,7 @@ def compute_compresult_team_flags(
         ]
     )
 
-    if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= REGIONAL_TEAM_MIN_PERCENT:
+    if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= float(regional_threshold):
         regionalteam = "yes"
 
     return {"NationalTeam": nationalteam, "RegionalTeam": regionalteam}
@@ -1631,7 +1731,7 @@ def bewertung_wettkampf():
         except Exception:
             return None
 
-    def get_status(selection_row, qual_flag, points):
+    def get_status(selection_row, qual_flag, points, national_threshold):
         if selection_row.empty:
             return "no", "", "no"
         limit = safe_numeric(selection_row.iloc[0].get('points'))
@@ -1645,7 +1745,7 @@ def bewertung_wettkampf():
             status = "yes" if points_val >= limit else "no"
         else:
             status = "no"
-        national = "yes" if percentage >= NATIONAL_TEAM_MIN_PERCENT else "no"
+        national = "yes" if percentage >= float(national_threshold) else "no"
         return status, f"{percentage}%", national
 
     def _comp_label_col(df: pd.DataFrame) -> pd.Series:
@@ -1679,6 +1779,7 @@ def bewertung_wettkampf():
         df_results = pd.DataFrame(comp_results)
         df_selection = pd.DataFrame(selection_points)
         df_comp = pd.DataFrame(competitions)
+        kader_rules = load_kader_threshold_rules()
 
         for _, row in df_results.iterrows():
             comp_id = row["id"]
@@ -1694,6 +1795,7 @@ def bewertung_wettkampf():
             category = row["CategoryStart"]
             points = row["Points"]
             competition_name = row["Competition"]
+            national_threshold, regional_threshold = resolve_kader_thresholds(discipline, category, rules=kader_rules)
 
             dives = None
             if all(col in df_agedives.columns for col in ['sex', 'category', 'Discipline', 'dives']):
@@ -1781,9 +1883,9 @@ def bewertung_wettkampf():
             if points_float is None:
                 continue
 
-            jem, jem_pct, jem_nt = get_status(jem_row, jem_qual, points_float)
-            em, em_pct, em_nt = get_status(em_row, em_qual, points_float)
-            wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points_float)
+            jem, jem_pct, jem_nt = get_status(jem_row, jem_qual, points_float, national_threshold)
+            em, em_pct, em_nt = get_status(em_row, em_qual, points_float, national_threshold)
+            wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points_float, national_threshold)
             nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
 
             # RegionalTeam-Berechnung
@@ -1804,7 +1906,7 @@ def bewertung_wettkampf():
                 str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
             )
 
-            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= REGIONAL_TEAM_MIN_PERCENT:
+            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= float(regional_threshold):
                 regionalteam = "yes"
 
             update_payload = {
@@ -1827,6 +1929,7 @@ def bewertung_wettkampf():
         df_results = pd.DataFrame(comp_results)
         df_selection = pd.DataFrame(selection_points)
         df_comp = pd.DataFrame(competitions)
+        kader_rules = load_kader_threshold_rules()
 
         updated_count = 0
         total_in_year = 0
@@ -1841,6 +1944,7 @@ def bewertung_wettkampf():
             category = row["CategoryStart"]
             points = row["Points"]
             competition_name = row["Competition"]
+            national_threshold, regional_threshold = resolve_kader_thresholds(discipline, category, rules=kader_rules)
 
             comp_row = df_comp[df_comp["Name"] == competition_name]
             comp_row = comp_row.iloc[0] if not comp_row.empty else {}
@@ -1941,9 +2045,9 @@ def bewertung_wettkampf():
             if points_float is None:
                 continue
 
-            jem, jem_pct, jem_nt = get_status(jem_row, jem_qual, points_float)
-            em, em_pct, em_nt = get_status(em_row, em_qual, points_float)
-            wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points_float)
+            jem, jem_pct, jem_nt = get_status(jem_row, jem_qual, points_float, national_threshold)
+            em, em_pct, em_nt = get_status(em_row, em_qual, points_float, national_threshold)
+            wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points_float, national_threshold)
             nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
 
             # RegionalTeam-Berechnung
@@ -1959,7 +2063,7 @@ def bewertung_wettkampf():
                 except Exception:
                     pass
 
-            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= REGIONAL_TEAM_MIN_PERCENT:
+            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= float(regional_threshold):
                 regionalteam = "yes"
 
             update_payload = {
@@ -1997,6 +2101,7 @@ def bewertung_wettkampf():
         df_results = pd.DataFrame([r for r in comp_results if not r.get("timestamp")])
         df_selection = pd.DataFrame(selection_points)
         df_comp = pd.DataFrame(competitions)
+        kader_rules = load_kader_threshold_rules()
 
         for _, row in df_results.iterrows():
             comp_id = row["id"]
@@ -2011,6 +2116,7 @@ def bewertung_wettkampf():
             category = row["CategoryStart"]
             points = row["Points"]
             competition_name = row["Competition"]
+            national_threshold, regional_threshold = resolve_kader_thresholds(discipline, category, rules=kader_rules)
 
             dives = None
             if all(col in df_agedives.columns for col in ['sex', 'category', 'Discipline', 'dives']):
@@ -2068,9 +2174,9 @@ def bewertung_wettkampf():
             wm_qual = bool(comp_row.get("qual-WM", False))
             regional_qual = bool(comp_row.get("qual-Regional", False))
 
-            jem, jem_pct, jem_nt = get_status(jem_row, jem_qual, points)
-            em, em_pct, em_nt = get_status(em_row, em_qual, points)
-            wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points)
+            jem, jem_pct, jem_nt = get_status(jem_row, jem_qual, points, national_threshold)
+            em, em_pct, em_nt = get_status(em_row, em_qual, points, national_threshold)
+            wm, wm_pct, wm_nt = get_status(wm_row, wm_qual, points, national_threshold)
 
             nationalteam = "yes" if "yes" in [jem_nt, em_nt, wm_nt] else "no"
 
@@ -2092,7 +2198,7 @@ def bewertung_wettkampf():
                 str(discipline).strip().lower() in ["1m synchro", "3m synchro", "platform synchro", "turm synchro"]
             )
 
-            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= REGIONAL_TEAM_MIN_PERCENT:
+            if regional_qual and not excluded_synchro and regional_pct is not None and regional_pct >= float(regional_threshold):
                 regionalteam = "yes"
 
             update_payload = {
@@ -2385,7 +2491,19 @@ def manage_compresults_entry():
     selectionpoints_df = pd.DataFrame(selectionpoints)
     competitions_df = pd.DataFrame(competitions)
 
-    discipline = st.selectbox("Disziplin", ["1m", "3m", "platform", "3m synchro", "platform synchro"])
+    discipline = st.selectbox(
+        "Disziplin",
+        [
+            "1m",
+            "3m",
+            "platform",
+            "3m synchro",
+            "platform synchro",
+            "high diving",
+            "high diving 20m",
+            "high diving 27m",
+        ],
+    )
     is_synchro = discipline in ["3m synchro", "platform synchro"]
 
     # --- Synchro: Modus (gleich / mixed) ---
@@ -2589,10 +2707,19 @@ def manage_compresults_entry():
         key="divelive_compresults_uploader",
     )
 
-    def _normalize_divelive_discipline(value: str) -> str:
+    def _normalize_divelive_discipline(value: str, category: str = "") -> str:
         s = str(value or "").strip().lower()
+        cat = str(category or "").strip().lower()
         if s == "":
             return ""
+        if "high" in s or "20m" in s or "27m" in s:
+            if "27" in s:
+                return "high diving 27m"
+            if "20" in s:
+                return "high diving 20m"
+            if cat in ["jugend a", "jugend b"]:
+                return "high diving"
+            return "high diving"
         if "platform" in s or "tower" in s or "turm" in s:
             return "platform"
         if s.startswith("1"):
@@ -2662,7 +2789,7 @@ def manage_compresults_entry():
                             skipped_dl.append({"first_name": first, "last_name": last, "reason": "Category fehlt"})
                             continue
 
-                        discipline_val = _normalize_divelive_discipline(row[cols_by_lower["event_height"]])
+                        discipline_val = _normalize_divelive_discipline(row[cols_by_lower["event_height"]], category=category)
                         if str(discipline_val).strip() == "":
                             skipped_dl.append({"first_name": first, "last_name": last, "reason": "event_height/Discipline fehlt"})
                             continue
@@ -2828,7 +2955,20 @@ def manage_compresults_correction():
         }
     )
     discipline_options = sorted(
-        set(["1m", "3m", "platform", "3m synchro", "platform synchro"] + all_discipline_values + [current_discipline])
+        set(
+            [
+                "1m",
+                "3m",
+                "platform",
+                "3m synchro",
+                "platform synchro",
+                "high diving",
+                "high diving 20m",
+                "high diving 27m",
+            ]
+            + all_discipline_values
+            + [current_discipline]
+        )
     )
     category_options = ["Jugend A", "Jugend B", "Jugend C", "Jugend D", "Elite"]
     prefin_options = ["FinalOnly", "Preliminary", "Final"]
@@ -2850,6 +2990,26 @@ def manage_compresults_correction():
     )
     new_points = st.number_input("Neue Punktzahl", min_value=0.0, step=0.1, format="%.2f", value=current_points)
     new_difficulty = st.number_input("Neue Difficulty", min_value=0.0, step=0.1, format="%.2f", value=current_difficulty)
+    current_id = int(current["id"])
+
+    st.markdown("---")
+    st.caption(f"Aktueller Eintrag: id={current_id}")
+    delete_confirmed = st.checkbox(
+        "Ich möchte diesen Eintrag dauerhaft löschen",
+        key=f"compresult_delete_confirm_{current_id}",
+    )
+    if st.button("🗑️ Eintrag löschen", key=f"compresult_delete_btn_{current_id}"):
+        if not delete_confirmed:
+            st.error("Bitte das Löschen zuerst bestätigen.")
+        else:
+            try:
+                db.table_delete("compresults", id=current_id)
+                st.success(f"Eintrag id={current_id} wurde gelöscht.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Löschen fehlgeschlagen: {e}")
+
+    st.markdown("---")
 
     if st.button("💾 Korrektur speichern"):
         competitions_data = fetch_all_rows('competitions', select='Name, Date, PisteYear, [qual-Regional], [qual-JEM], [qual-EM], [qual-WM]')
@@ -2889,8 +3049,8 @@ def manage_compresults_correction():
             "timestamp": None,
             **team_flags,
         }
-        db.table_update("compresults", update_payload, id=int(current["id"]))
-        st.success(f"Eintrag id={int(current['id'])} wurde korrigiert. timestamp wurde auf NULL gesetzt.")
+        db.table_update("compresults", update_payload, id=current_id)
+        st.success(f"Eintrag id={current_id} wurde korrigiert. timestamp wurde auf NULL gesetzt.")
         st.rerun()
 
 def safe_numeric(val):
@@ -4866,6 +5026,11 @@ def selektionen_wettkaempfe():
 def referenztabellen_anzeigen():
     st.header("📚 Referenz- und Bewertungstabellen")
 
+    try:
+        ensure_kaderthresholds_table()
+    except Exception as e:
+        st.warning(f"Kader-Schwellen konnten nicht initialisiert werden: {e}")
+
     pistedisciplines = pd.DataFrame(fetch_all_rows("pistedisciplines", select="id,name"))
     discipline_name_by_id = {}
     if not pistedisciplines.empty:
@@ -4889,6 +5054,26 @@ def referenztabellen_anzeigen():
         st.subheader(title)
         rows = fetch_all_rows(table_name, select="*", **(filters or {}))
         df = pd.DataFrame(rows)
+
+        def _normalize_id_value(v):
+            if pd.isna(v):
+                return None
+            if isinstance(v, str):
+                s = v.strip()
+                if not s or s.lower() == "nan":
+                    return None
+                if int_id:
+                    try:
+                        return str(int(float(s)))
+                    except Exception:
+                        return None
+                return s
+            if int_id:
+                try:
+                    return str(int(float(v)))
+                except Exception:
+                    return None
+            return str(v)
 
         for col in columns:
             if col not in df.columns:
@@ -4924,8 +5109,8 @@ def referenztabellen_anzeigen():
             orig = editable.copy()
             new = edited.copy()
 
-            orig["id"] = orig["id"].apply(lambda x: None if pd.isna(x) else str(x))
-            new["id"] = new["id"].apply(lambda x: None if pd.isna(x) else str(x))
+            orig["id"] = orig["id"].apply(_normalize_id_value)
+            new["id"] = new["id"].apply(_normalize_id_value)
 
             orig_name_by_id = {}
             if table_name == "competitions" and "Name" in orig.columns:
@@ -4954,7 +5139,7 @@ def referenztabellen_anzeigen():
             cascade_ref_total = 0
 
             for _, row in new.iterrows():
-                row_id = row.get("id")
+                row_id = _normalize_id_value(row.get("id"))
                 payload = {c: _norm(row.get(c)) for c in persist_cols if c != "id"}
                 payload = {k: v for k, v in payload.items() if v is not None}
 
@@ -5020,6 +5205,86 @@ def referenztabellen_anzeigen():
         int_id=True,
         sort_by=["Competition", "year", "category", "Discipline", "sex"],
     )
+
+    st.subheader("🧮 Kader %-Schwellen")
+    try:
+        threshold_rows = fetch_all_rows(
+            "socadditionalvalues",
+            select="id, first_name, last_name, CompPointsNationalTeam, CompPointsRegionalTeam, quality",
+            toolenvironment="kaderthresholds",
+        )
+        df_thr = pd.DataFrame(threshold_rows)
+        for c in ["id", "first_name", "last_name", "CompPointsNationalTeam", "CompPointsRegionalTeam", "quality"]:
+            if c not in df_thr.columns:
+                df_thr[c] = None
+        df_thr = df_thr[["id", "first_name", "last_name", "CompPointsNationalTeam", "CompPointsRegionalTeam", "quality"]].copy()
+        df_thr = df_thr.rename(
+            columns={
+                "first_name": "discipline",
+                "last_name": "category_group",
+                "CompPointsNationalTeam": "national_percent",
+                "CompPointsRegionalTeam": "regional_percent",
+                "quality": "notes",
+            }
+        )
+        df_thr = df_thr.sort_values(["discipline", "category_group"], na_position="last").reset_index(drop=True)
+
+        edited_thr = st.data_editor(
+            df_thr,
+            hide_index=True,
+            num_rows="dynamic",
+            key="kaderthresholds_editor",
+        )
+
+        if st.button("💾 🧮 Kader %-Schwellen speichern", key="kaderthresholds_save"):
+            orig = df_thr.copy()
+            new = edited_thr.copy()
+
+            def _norm_id(v):
+                if pd.isna(v):
+                    return None
+                try:
+                    return str(int(float(v)))
+                except Exception:
+                    return None
+
+            orig["id"] = orig["id"].apply(_norm_id)
+            new["id"] = new["id"].apply(_norm_id)
+
+            orig_ids = {v for v in orig["id"].tolist() if v}
+            new_ids = {v for v in new["id"].tolist() if v}
+            for del_id in sorted(orig_ids - new_ids):
+                db.table_delete("socadditionalvalues", id=int(del_id))
+
+            for _, r in new.iterrows():
+                rid = _norm_id(r.get("id"))
+                discipline = _norm(r.get("discipline"))
+                category_group = _norm(r.get("category_group")) or "all"
+                nat = _norm(r.get("national_percent"))
+                reg = _norm(r.get("regional_percent"))
+                notes = _norm(r.get("notes"))
+
+                if not discipline:
+                    continue
+
+                payload = {
+                    "toolenvironment": "kaderthresholds",
+                    "PisteYear": "global",
+                    "first_name": discipline,
+                    "last_name": category_group,
+                    "CompPointsNationalTeam": nat,
+                    "CompPointsRegionalTeam": reg,
+                    "quality": notes,
+                }
+                if rid:
+                    db.table_update("socadditionalvalues", payload, id=int(rid))
+                else:
+                    db.table_insert("socadditionalvalues", payload)
+
+            st.success("Kader %-Schwellen gespeichert.")
+            st.rerun()
+    except Exception as e:
+        st.warning(f"Kader-Schwellen konnten nicht angezeigt werden: {e}")
 
     _render_inline_table(
         title="🏟️ Wettkämpfe (Competitions)",
