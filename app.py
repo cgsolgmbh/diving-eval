@@ -4639,6 +4639,21 @@ def selektionen_wettkaempfe():
     comp_year_map = {c['Name']: c.get('PisteYear') for c in competitions if c.get('Name')}
 
     compresults = db.table_select('compresults', '*')
+    selectionpoints = fetch_all_rows('selectionpoints', select='Competition, year, Discipline, sex, category, points')
+    df_selectionpoints = pd.DataFrame(selectionpoints)
+
+    def _norm_text(val):
+        return str(val or "").strip().lower()
+
+    def _safe_float(val):
+        if val in (None, "", "nan"):
+            return None
+        try:
+            if isinstance(val, str):
+                val = val.strip().replace("%", "").replace(",", ".")
+            return float(val)
+        except Exception:
+            return None
 
     # Schneller: Jahre aus compresults + Mapping
     years = sorted(
@@ -4660,14 +4675,14 @@ def selektionen_wettkaempfe():
     selected_tab = st.selectbox("Selektionstyp", list(selektionstypen.keys()))
 
     # Filter nach Jahr (Competition → PisteYear)
-    filtered = [
+    filtered_year = [
         r for r in compresults
         if comp_year_map.get(r.get('Competition')) and str(comp_year_map.get(r.get('Competition'))) == str(selected_year)
     ]
 
     # Filter nach Selektionstyp
     spalte = selektionstypen[selected_tab]
-    filtered = [r for r in filtered if str(r.get(spalte, "")).lower() == "yes"]
+    filtered = [r for r in filtered_year if str(r.get(spalte, "")).lower() == "yes"]
 
     # Anzeige-Spalten
     show_cols = ["first_name", "last_name", "sex", "CategoryStart", "Competition", "Discipline", "Points"]
@@ -4693,6 +4708,84 @@ def selektionen_wettkaempfe():
         )
     else:
         st.info("Keine Einträge für die einzigartige Liste gefunden.")
+
+    # Zusatzliste für JEM/EM: weitere Wettkämpfe mit >=90% der jeweiligen Limite
+    if selected_tab in ["JEM", "EM"] and not df.empty and not df_selectionpoints.empty:
+        st.subheader(f"📈 Zusätzliche Wettkämpfe mit mindestens 90% der {selected_tab}-Limite")
+        st.caption("Für Athleten mit JEM/EM = yes werden alle Wettkämpfe im gewählten Jahr geprüft.")
+
+        yes_athletes = set(
+            (
+                _norm_text(r.get("first_name")),
+                _norm_text(r.get("last_name")),
+                _norm_text(r.get("sex")),
+            )
+            for _, r in df.iterrows()
+        )
+
+        extra_rows = []
+        for r in filtered_year:
+            athlete_key = (
+                _norm_text(r.get("first_name")),
+                _norm_text(r.get("last_name")),
+                _norm_text(r.get("sex")),
+            )
+            if athlete_key not in yes_athletes:
+                continue
+
+            points_val = _safe_float(r.get("Points"))
+            if points_val is None:
+                continue
+
+            discipline = _norm_text(r.get("Discipline"))
+            sex = _norm_text(r.get("sex"))
+            category = _norm_text(r.get("CategoryStart"))
+
+            lim = df_selectionpoints[
+                (df_selectionpoints["Competition"].astype(str).str.strip().str.lower() == selected_tab.lower())
+                & (df_selectionpoints["year"].astype(str).str.strip() == str(selected_year).strip())
+                & (df_selectionpoints["Discipline"].astype(str).str.strip().str.lower() == discipline)
+                & (df_selectionpoints["sex"].astype(str).str.strip().str.lower() == sex)
+                & (df_selectionpoints["category"].astype(str).str.strip().str.lower() == category)
+            ]
+
+            if lim.empty:
+                continue
+
+            limit_val = _safe_float(lim.iloc[0].get("points"))
+            if not limit_val:
+                continue
+
+            pct = round((points_val / limit_val) * 100, 1)
+            if pct < 90:
+                continue
+
+            extra_rows.append({
+                "first_name": r.get("first_name"),
+                "last_name": r.get("last_name"),
+                "sex": r.get("sex"),
+                "CategoryStart": r.get("CategoryStart"),
+                "Competition": r.get("Competition"),
+                "Discipline": r.get("Discipline"),
+                "Points": points_val,
+                f"{selected_tab} Limite": limit_val,
+                "% zur Limite": pct,
+            })
+
+        if extra_rows:
+            df_extra = pd.DataFrame(extra_rows)
+            idx = df_extra.groupby(["first_name", "last_name", "sex", "CategoryStart", "Competition"])["% zur Limite"].idxmax()
+            df_extra_unique_comp = df_extra.loc[idx].sort_values(["last_name", "first_name", "Competition"]).reset_index(drop=True)
+
+            st.dataframe(df_extra_unique_comp)
+            st.download_button(
+                "📥 Zusätzliche 90%-Wettkämpfe als CSV herunterladen",
+                df_extra_unique_comp.to_csv(index=False, encoding='utf-8-sig'),
+                file_name=f"{selected_tab}_{selected_year}_plus_90pct.csv",
+                mime="text/csv",
+            )
+        else:
+            st.info(f"Keine zusätzlichen Wettkämpfe mit >=90% der {selected_tab}-Limite gefunden.")
 
 def referenztabellen_anzeigen():
     st.header("📚 Referenz- und Bewertungstabellen")
