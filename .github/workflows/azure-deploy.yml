@@ -7,14 +7,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - app.py
-      - db.py
-      - startup.sh
-      - requirements.txt
-      - sqltables/**
-      - .streamlit/config.toml
-      - .github/workflows/azure-deploy.yml
 
 jobs:
   deploy:
