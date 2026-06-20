@@ -444,6 +444,8 @@ def _normalize_sex_value(val):
         "f": "female",
         "female": "female",
         "woman": "female",
+        "mixed": "mixed",
+        "mix": "mixed",
     }
     return mapping.get(s, s)
 
@@ -2350,9 +2352,6 @@ def manage_compresults_entry():
 
     # --- Athleten und Wettkämpfe laden ---
     athletes = fetch_all_rows('athletes', select='id, first_name, last_name, sex')
-    athlete_names = {f"{a['first_name']} {a['last_name']}": a for a in athletes}
-    selected_athlete = st.selectbox("Athlet", list(athlete_names.keys()))
-    athlete_data = athlete_names[selected_athlete] if selected_athlete else None
 
     competitions = fetch_all_rows('competitions', select='Name, Date, PisteYear, [qual-Regional], [qual-JEM], [qual-EM], [qual-WM]')
     competition_names = [c['Name'] for c in competitions]
@@ -2363,13 +2362,83 @@ def manage_compresults_entry():
     competitions_df = pd.DataFrame(competitions)
 
     discipline = st.selectbox("Disziplin", ["1m", "3m", "platform", "3m synchro", "platform synchro"])
+    is_synchro = discipline in ["3m synchro", "platform synchro"]
+
+    # --- Synchro: Modus (gleich / mixed) ---
+    if is_synchro:
+        synchro_mode = st.radio(
+            "Synchro Modus",
+            ["weiblich (Pair)", "männlich (Pair)", "mixed (1 weiblich + 1 männlich)"],
+            horizontal=True,
+            key="synchro_mode_radio",
+        )
+        is_mixed = "mixed" in synchro_mode
+        female_names = {f"{a['first_name']} {a['last_name']}": a for a in athletes if _normalize_sex_value(a.get('sex')) == 'female'}
+        male_names = {f"{a['first_name']} {a['last_name']}": a for a in athletes if _normalize_sex_value(a.get('sex')) == 'male'}
+
+        if is_mixed:
+            st.info("Mixed Synchro: 1 weibliche + 1 männliche Athletin/Athlet. Beide Ergebnisse werden mit sex='mixed' gespeichert.")
+            selected_female = st.selectbox("Athletin (weiblich)", list(female_names.keys()), key="synchro_female_sel")
+            selected_male = st.selectbox("Athlet (männlich)", list(male_names.keys()), key="synchro_male_sel")
+            synchro_athletes = [female_names.get(selected_female), male_names.get(selected_male)]
+            sex_to_save = "mixed"
+        elif "weiblich" in synchro_mode:
+            selected_ath1 = st.selectbox("Athletin 1 (weiblich)", list(female_names.keys()), key="synchro_f1_sel")
+            selected_ath2 = st.selectbox("Athletin 2 (weiblich)", list(female_names.keys()), key="synchro_f2_sel")
+            synchro_athletes = [female_names.get(selected_ath1), female_names.get(selected_ath2)]
+            sex_to_save = "female"
+        else:
+            selected_ath1 = st.selectbox("Athlet 1 (männlich)", list(male_names.keys()), key="synchro_m1_sel")
+            selected_ath2 = st.selectbox("Athlet 2 (männlich)", list(male_names.keys()), key="synchro_m2_sel")
+            synchro_athletes = [male_names.get(selected_ath1), male_names.get(selected_ath2)]
+            sex_to_save = "male"
+        athlete_data = None
+    else:
+        is_mixed = False
+        synchro_athletes = []
+        sex_to_save = None
+        athlete_names = {f"{a['first_name']} {a['last_name']}": a for a in athletes}
+        selected_athlete = st.selectbox("Athlet", list(athlete_names.keys()))
+        athlete_data = athlete_names[selected_athlete] if selected_athlete else None
+        if athlete_data:
+            sex_to_save = athlete_data['sex']
+
     category_start = st.selectbox("Kategorie", ["Jugend A", "Jugend B", "Jugend C", "Jugend D", "Elite"])
     prefin = st.selectbox("PreFin", ["FinalOnly", "Preliminary", "Final"])
     points = st.number_input("Punkte", min_value=0.0, step=0.1, format="%.2f")
     difficulty = st.number_input("Difficulty", min_value=0.0, step=0.1, format="%.2f")
 
     if st.button("💾 Ergebnis speichern"):
-        if athlete_data:
+        if is_synchro:
+            valid_athletes = [a for a in synchro_athletes if a]
+            if len(valid_athletes) < 2:
+                st.error("Bitte beide Athleten auswählen.")
+            else:
+                team_flags = compute_compresult_team_flags(
+                    competition_name=selected_competition,
+                    sex=sex_to_save,
+                    discipline=discipline,
+                    category_start=category_start,
+                    points=points,
+                    competitions_df=competitions_df,
+                    selectionpoints_df=selectionpoints_df,
+                )
+                for ath in valid_athletes:
+                    db.table_insert('compresults', {
+                        "first_name": ath['first_name'],
+                        "last_name": ath['last_name'],
+                        "sex": sex_to_save,
+                        "Competition": selected_competition,
+                        "Discipline": discipline,
+                        "CategoryStart": category_start,
+                        "PreFin": prefin,
+                        "Points": points,
+                        "Difficulty": difficulty,
+                        **team_flags,
+                    })
+                label = "Mixed-Paar" if is_mixed else "Synchro-Paar"
+                st.success(f"Wettkampfresultat für {label} gespeichert (2 Einträge)!")
+        elif athlete_data:
             team_flags = compute_compresult_team_flags(
                 competition_name=selected_competition,
                 sex=athlete_data['sex'],
