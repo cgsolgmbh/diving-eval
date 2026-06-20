@@ -2189,6 +2189,7 @@ def manage_compresults_entry():
     st.header("🏅 Wettkampfresultate eingeben")
 
     st.caption("Wettkämpfe können direkt hier oder unter 'Referenz- und Bewertungstabellen' bearbeitet werden.")
+    st.caption("Synchro unterstützt Paar-Erfassung: weiblich, männlich und mixed (1x weiblich + 1x männlich).")
     col_jump, col_inline = st.columns([1, 2])
     with col_jump:
         if st.button("⚙️ Zu Wettkämpfe-Tabelle", key="goto_competitions_table"):
