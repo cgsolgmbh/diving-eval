@@ -1,0 +1,1 @@
+INSERT INTO "public"."agecategorieshd" ("id", "min_age", "mag_age", "category") VALUES (1, '15', '17', 'HDNachwuchs'), (2, '18', '99', 'HDElite');
