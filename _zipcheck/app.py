@@ -4592,6 +4592,26 @@ def referenztabellen_anzeigen():
         rows = fetch_all_rows(table_name, select="*", **(filters or {}))
         df = pd.DataFrame(rows)
 
+        def _normalize_id_value(v):
+            if pd.isna(v):
+                return None
+            if isinstance(v, str):
+                s = v.strip()
+                if not s or s.lower() == "nan":
+                    return None
+                if int_id:
+                    try:
+                        return str(int(float(s)))
+                    except Exception:
+                        return None
+                return s
+            if int_id:
+                try:
+                    return str(int(float(v)))
+                except Exception:
+                    return None
+            return str(v)
+
         for col in columns:
             if col not in df.columns:
                 df[col] = None
@@ -4626,8 +4646,8 @@ def referenztabellen_anzeigen():
             orig = editable.copy()
             new = edited.copy()
 
-            orig["id"] = orig["id"].apply(lambda x: None if pd.isna(x) else str(x))
-            new["id"] = new["id"].apply(lambda x: None if pd.isna(x) else str(x))
+            orig["id"] = orig["id"].apply(_normalize_id_value)
+            new["id"] = new["id"].apply(_normalize_id_value)
 
             orig_ids = {v for v in orig["id"].tolist() if v}
             new_ids = {v for v in new["id"].tolist() if v}
@@ -4645,7 +4665,7 @@ def referenztabellen_anzeigen():
                 next_id = (max(int_existing) + 1) if int_existing else 1
 
             for _, row in new.iterrows():
-                row_id = row.get("id")
+                row_id = _normalize_id_value(row.get("id"))
                 payload = {c: _norm(row.get(c)) for c in persist_cols if c != "id"}
                 payload = {k: v for k, v in payload.items() if v is not None}
 
