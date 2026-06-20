@@ -4655,13 +4655,16 @@ def selektionen_wettkaempfe():
         except Exception:
             return None
 
-    def _calc_limit_pct(result_row, limit_competition):
+    def _is_yes(val):
+        return _norm_text(val) == "yes"
+
+    def _calc_limit_pct(result_row, limit_competition, sex_fallback=None):
         points_val = _safe_float(result_row.get("Points"))
         if points_val is None:
             return None, None
 
         discipline = _norm_text(result_row.get("Discipline"))
-        sex = _norm_text(result_row.get("sex"))
+        sex = _norm_text(result_row.get("sex")) or _norm_text(sex_fallback)
         category = _norm_text(result_row.get("CategoryStart"))
 
         lim = df_selectionpoints[
@@ -4707,7 +4710,7 @@ def selektionen_wettkaempfe():
 
     # Filter nach Selektionstyp
     spalte = selektionstypen[selected_tab]
-    filtered = [r for r in filtered_year if str(r.get(spalte, "")).lower() == "yes"]
+    filtered = [r for r in filtered_year if _is_yes(r.get(spalte, ""))]
 
     # Anzeige-Spalten
     show_cols = ["first_name", "last_name", "sex", "CategoryStart", "Competition", "Discipline", "Points"]
@@ -4727,27 +4730,36 @@ def selektionen_wettkaempfe():
 
     df = pd.DataFrame(filtered)
     if selected_tab in ["JEM", "EM"] and not df.empty:
+        # Robuste Verknüpfung über Name; Sex bei Zusatzdisziplinen kann fehlen/abweichen.
         yes_athletes = set(
             (
                 _norm_text(r.get("first_name")),
                 _norm_text(r.get("last_name")),
-                _norm_text(r.get("sex")),
             )
             for _, r in df.iterrows()
         )
+
+        sex_by_athlete = {}
+        for _, r in df.iterrows():
+            key = (_norm_text(r.get("first_name")), _norm_text(r.get("last_name")))
+            sex_val = _norm_text(r.get("sex"))
+            if key != ("", "") and sex_val and key not in sex_by_athlete:
+                sex_by_athlete[key] = sex_val
 
         integrated_rows = []
         for r in filtered_year:
             athlete_key = (
                 _norm_text(r.get("first_name")),
                 _norm_text(r.get("last_name")),
-                _norm_text(r.get("sex")),
             )
             if athlete_key not in yes_athletes:
                 continue
 
-            limit_val, pct = _calc_limit_pct(r, selected_tab)
-            is_yes = str(r.get(spalte, "")).lower() == "yes"
+            athlete_name_key = (_norm_text(r.get("first_name")), _norm_text(r.get("last_name")))
+            sex_fallback = sex_by_athlete.get(athlete_name_key)
+
+            limit_val, pct = _calc_limit_pct(r, selected_tab, sex_fallback=sex_fallback)
+            is_yes = _is_yes(r.get(spalte, ""))
             is_extra_90 = pct is not None and pct >= 90
 
             # Hauptliste integriert: Selektion=yes ODER zusätzliche Disziplin >=90%
