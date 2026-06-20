@@ -4765,7 +4765,7 @@ def selektionen_wettkaempfe():
 
             integrated_rows.append({
                 "Ampel": ampel,
-                "Quelle": "Selektion yes" if is_yes else "Zusatz >=90%",
+                "Quelle": "Direkt qualifiziert" if is_yes else "Zusatzdisziplin 90+",
                 "first_name": r.get("first_name"),
                 "last_name": r.get("last_name"),
                 "sex": r.get("sex"),
