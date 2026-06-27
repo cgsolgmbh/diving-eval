@@ -4,6 +4,7 @@ import time
 import importlib
 import site
 import sys
+import math
 import pymssql
 
 try:
@@ -37,6 +38,13 @@ def _normalize_sql_param(value):
     # NaN is not comparable to itself.
     try:
         if value != value:
+            return None
+    except Exception:
+        pass
+
+    # pyodbc rejects non-finite floats in RPC parameter binding.
+    try:
+        if isinstance(value, float) and not math.isfinite(value):
             return None
     except Exception:
         pass

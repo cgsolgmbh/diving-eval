@@ -10,6 +10,7 @@ import re
 import os
 import json
 import base64
+import math
 
 st.set_page_config(page_title="Diving Evaluation", page_icon="🤿")
 
@@ -3638,13 +3639,15 @@ def piste_refpoint_wettkampf_analyse():
                     try:
                         ref_value = float(ref_value)
                         avg_points_val = float(avg_points)
+                        if not math.isfinite(ref_value) or not math.isfinite(avg_points_val):
+                            continue
                         deviation = round(((avg_points_val - ref_value) / ref_value) * 100, 1) if ref_value else None
-                        if deviation is not None and pd.notna(deviation):
+                        if deviation is not None and pd.notna(deviation) and math.isfinite(float(deviation)):
                             quality_vals.append(deviation)
                     except Exception:
                         continue
                 quality = round(sum(quality_vals) / len(quality_vals), 1) if quality_vals else None
-                if pd.isna(quality):
+                if pd.isna(quality) or (quality is not None and not math.isfinite(float(quality))):
                     quality = None
                 db.table_update('pisterefcompresults', {"quality": quality},
                     first_name=this_year_row.iloc[0]["first_name"],
