@@ -3595,6 +3595,10 @@ def piste_refpoint_wettkampf_analyse():
                     continue
                 age = this_year_row.iloc[0].get("age")
                 sex = this_year_row.iloc[0].get("sex", None)
+                try:
+                    age_int = int(float(age)) if pd.notna(age) else None
+                except Exception:
+                    age_int = None
                 if not age or not sex:
                     cr = compresults_df[
                         (compresults_df['first_name'].str.strip().str.lower() == first) &
@@ -3603,6 +3607,8 @@ def piste_refpoint_wettkampf_analyse():
                     ]
                     if not cr.empty:
                         sex = cr.iloc[0].get("sex")
+                if age_int is None:
+                    continue
                 cr_rows = compresults_df[
                     (compresults_df['first_name'].str.strip().str.lower() == first) &
                     (compresults_df['last_name'].str.strip().str.lower() == last) &
@@ -3617,13 +3623,15 @@ def piste_refpoint_wettkampf_analyse():
                     # --- AUSSCHLUSS HIER ---
                     if is_excluded_discipline_local(discipline, age, selected_year, agecat_df):
                         continue
-                    if not (discipline and sex and avg_points and age):
+                    if not (discipline and sex):
+                        continue
+                    if pd.isna(avg_points):
                         continue
                     ref_row = refcomppoints_df[
                         (refcomppoints_df["Discipline"].astype(str).str.strip().str.lower() == str(discipline).strip().lower()) &
                         (refcomppoints_df["sex"].astype(str).str.strip().str.lower() == str(sex).strip().lower())
                     ]
-                    quality_col = f"quality{int(age)}"
+                    quality_col = f"quality{age_int}"
                     if ref_row.empty or quality_col not in ref_row.columns:
                         continue
                     ref_value = ref_row.iloc[0][quality_col]
@@ -3631,11 +3639,13 @@ def piste_refpoint_wettkampf_analyse():
                         ref_value = float(ref_value)
                         avg_points_val = float(avg_points)
                         deviation = round(((avg_points_val - ref_value) / ref_value) * 100, 1) if ref_value else None
-                        if deviation is not None:
+                        if deviation is not None and pd.notna(deviation):
                             quality_vals.append(deviation)
                     except Exception:
                         continue
                 quality = round(sum(quality_vals) / len(quality_vals), 1) if quality_vals else None
+                if pd.isna(quality):
+                    quality = None
                 db.table_update('pisterefcompresults', {"quality": quality},
                     first_name=this_year_row.iloc[0]["first_name"],
                     last_name=this_year_row.iloc[0]["last_name"],

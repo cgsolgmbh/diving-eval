@@ -22,6 +22,34 @@ _LAST_CANDIDATES = None
 _LOGGER = logging.getLogger(__name__)
 
 
+def _normalize_sql_param(value):
+    """Convert non-SQL-safe Python values (like NaN) to DB-safe values."""
+    if value is None:
+        return None
+
+    # Unwrap NumPy scalar-like values when available.
+    try:
+        if hasattr(value, "item") and not isinstance(value, (str, bytes, bytearray)):
+            value = value.item()
+    except Exception:
+        pass
+
+    # NaN is not comparable to itself.
+    try:
+        if value != value:
+            return None
+    except Exception:
+        pass
+
+    return value
+
+
+def _normalize_sql_params(params):
+    if not params:
+        return ()
+    return tuple(_normalize_sql_param(p) for p in params)
+
+
 def _iter_extra_site_paths():
     paths = set()
 
@@ -388,8 +416,9 @@ def query(sql, params=None):
             cursor = conn.cursor(as_dict=True)
             sql_exec = sql
         started = time.time()
+        params_exec = _normalize_sql_params(params)
         _log(f"DB query start driver={_DB_DRIVER} sql={sql_exec!r} params={params!r}")
-        cursor.execute(sql_exec, params or ())
+        cursor.execute(sql_exec, params_exec)
         rows = _as_dict_rows(cursor)
         _log(f"DB query success driver={_DB_DRIVER} rows={len(rows)} elapsed={time.time() - started:.2f}s sql={sql_exec!r}")
         return rows
@@ -407,8 +436,9 @@ def execute(sql, params=None):
     try:
         cursor = conn.cursor()
         sql_exec = sql.replace("%s", "?") if _DB_DRIVER == "pyodbc" else sql
+        params_exec = _normalize_sql_params(params)
         _log(f"DB execute start driver={_DB_DRIVER} sql={sql_exec!r} params={params!r}")
-        cursor.execute(sql_exec, params or ())
+        cursor.execute(sql_exec, params_exec)
         conn.commit()
         _log(f"DB execute success driver={_DB_DRIVER} sql={sql_exec!r}")
     except Exception as exc:
