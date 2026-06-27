@@ -1781,6 +1781,7 @@ def bewertung_wettkampf():
         df_selection = pd.DataFrame(selection_points)
         df_comp = pd.DataFrame(competitions)
         kader_rules = load_kader_threshold_rules()
+        missing_selection_combos = []
 
         for _, row in df_results.iterrows():
             comp_id = row["id"]
