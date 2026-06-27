@@ -1658,6 +1658,7 @@ def bewertung_wettkampf():
     df_athletes = pd.DataFrame(athletes)
     df_agedives = pd.DataFrame(agedives)
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    missing_selection_combos = []
 
     athlete_sex_by_id = {}
     athlete_sex_by_name = {}
