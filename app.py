@@ -4170,7 +4170,12 @@ def soc_full_calculation():
         piste_results_df = pd.DataFrame(piste_results)
 
         # Bestehende Einträge für dieses Jahr löschen → danach immer frisch inserieren (kein Duplikat-Risiko)
-        db.execute("DELETE FROM [socadditionalvalues] WHERE [PisteYear] = %s", [pisteyear])
+        # Cast on both sides avoids int/nvarchar coercion issues when legacy values like 'global' exist.
+        db.execute(
+            "DELETE FROM [socadditionalvalues] "
+            "WHERE CAST([PisteYear] AS NVARCHAR(10)) = CAST(%s AS NVARCHAR(10))",
+            [pisteyear],
+        )
 
         athlete_data_map = {}
 
