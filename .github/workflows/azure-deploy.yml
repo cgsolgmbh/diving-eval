@@ -55,13 +55,13 @@ jobs:
           fi
 
       - name: Azure login (Service Principal)
-        if: ${{ env.HAS_PUBLISH_PROFILE != 'true' && env.HAS_AZURE_CREDENTIALS == 'true' }}
+        if: ${{ env.HAS_AZURE_CREDENTIALS == 'true' }}
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Deploy to Azure Web App (Publish Profile)
-        if: ${{ env.HAS_PUBLISH_PROFILE == 'true' }}
+        if: ${{ env.HAS_AZURE_CREDENTIALS != 'true' && env.HAS_PUBLISH_PROFILE == 'true' }}
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.APP_NAME }}
@@ -69,8 +69,73 @@ jobs:
           package: deploy_package
 
       - name: Deploy to Azure Web App (Azure Login)
-        if: ${{ env.HAS_PUBLISH_PROFILE != 'true' && env.HAS_AZURE_CREDENTIALS == 'true' }}
+        if: ${{ env.HAS_AZURE_CREDENTIALS == 'true' }}
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.APP_NAME }}
           package: deploy_package
+
+      - name: Restart Web App (Azure Login)
+        if: ${{ env.HAS_AZURE_CREDENTIALS == 'true' }}
+        run: |
+          az webapp restart \
+            --resource-group rg-divingeval-prod-chn \
+            --name "${APP_NAME}"
+
+      - name: Verify Live Version Marker
+        if: ${{ env.HAS_AZURE_CREDENTIALS == 'true' }}
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          python - <<'PY'
+          import base64
+          import os
+          import time
+          import xml.etree.ElementTree as ET
+          from urllib.request import Request, urlopen
+
+          app_name = os.environ["APP_NAME"]
+          expected = f"{os.environ['GITHUB_SHA'][:7]}-{os.environ['GITHUB_RUN_NUMBER']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
+
+          xml_raw = os.popen(
+              f"az webapp deployment list-publishing-profiles --resource-group rg-divingeval-prod-chn --name {app_name} --xml"
+          ).read()
+          root = ET.fromstring(xml_raw)
+
+          profile = None
+          for p in root.findall(".//publishProfile"):
+              if p.attrib.get("publishMethod") == "MSDeploy":
+                  profile = p
+                  break
+
+          if profile is None:
+              raise SystemExit("Could not find MSDeploy publishing profile for verification")
+
+          username = profile.attrib["userName"]
+          password = profile.attrib["userPWD"]
+          basic = base64.b64encode(f"{username}:{password}".encode("ascii")).decode("ascii")
+
+          url = f"https://{app_name}.scm.azurewebsites.net/api/vfs/site/wwwroot/.app_version"
+          headers = {"Authorization": f"Basic {basic}"}
+
+          live = None
+          for _ in range(24):
+              req = Request(url, headers=headers)
+              try:
+                  with urlopen(req, timeout=15) as resp:
+                      live = resp.read().decode("utf-8", errors="replace").strip()
+              except Exception:
+                  live = None
+
+              if live == expected:
+                  break
+              time.sleep(5)
+
+          print(f"Expected: {expected}")
+          print(f"Live:     {live}")
+
+          if live != expected:
+              raise SystemExit("Live deployment version mismatch. Failing workflow to prevent stale rollout.")
+          PY
