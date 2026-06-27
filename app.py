@@ -4144,7 +4144,8 @@ def soc_full_calculation():
     years = [str(y) for y in range(2024, 2031)]
     selected_year = st.selectbox("PisteYear wählen", years)
     if st.button("SOC Full Calculation starten"):
-        pisteyear = int(selected_year)
+        pisteyear = str(selected_year)
+        pisteyear_int = int(selected_year)
 
         athletes = db.table_select('athletes', 'id, first_name, last_name, birthdate, sex, vintage, bioage')
         athletes_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a for a in athletes}
@@ -4188,7 +4189,7 @@ def soc_full_calculation():
                     "birthdate": athlete['birthdate'],
                     "sex": athlete['sex'],
                     "PisteYear": pisteyear,
-                    "Category": get_category_from_agecategories(athlete.get('vintage'), pisteyear, agecategories)
+                    "Category": get_category_from_agecategories(athlete.get('vintage'), pisteyear_int, agecategories)
                 }
 
             bioage = athlete.get("bioage")
