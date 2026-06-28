@@ -38,6 +38,7 @@ jobs:
           cp -R sqltables deploy_package/sqltables
 
           VERSION="$(git rev-parse --short HEAD)-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          echo "$VERSION" > deploy_package/app_version.txt
           echo "$VERSION" > deploy_package/.app_version
 
           if [ -d .streamlit ]; then
@@ -117,7 +118,7 @@ jobs:
           password = profile.attrib["userPWD"]
           basic = base64.b64encode(f"{username}:{password}".encode("ascii")).decode("ascii")
 
-          url = f"https://{app_name}.scm.azurewebsites.net/api/vfs/site/wwwroot/.app_version"
+          url = f"https://{app_name}.scm.azurewebsites.net/api/vfs/site/wwwroot/app_version.txt"
           headers = {"Authorization": f"Basic {basic}"}
 
           live = None

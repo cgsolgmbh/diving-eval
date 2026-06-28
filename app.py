@@ -21,15 +21,16 @@ def get_app_version():
     if env_version:
         return str(env_version).strip()
 
-    version_file = os.path.join(os.path.dirname(__file__), ".app_version")
-    if os.path.exists(version_file):
-        try:
-            with open(version_file, "r", encoding="utf-8") as f:
-                value = f.read().strip()
-                if value:
-                    return value
-        except Exception:
-            pass
+    for version_name in ("app_version.txt", ".app_version"):
+        version_file = os.path.join(os.path.dirname(__file__), version_name)
+        if os.path.exists(version_file):
+            try:
+                with open(version_file, "r", encoding="utf-8") as f:
+                    value = f.read().strip()
+                    if value:
+                        return value
+            except Exception:
+                pass
 
     try:
         mtime = datetime.datetime.utcfromtimestamp(os.path.getmtime(__file__))
