@@ -457,8 +457,53 @@ def execute(sql, params=None):
         conn.close()
 
 
+def _is_athleteyearstatus_table(table):
+    return str(table).strip().lower() == "athleteyearstatus"
+
+
+def _athleteyearstatus_year_key(value):
+    return f"injuryflags:{str(value).strip()}"
+
+
+def _athleteyearstatus_year_from_key(value):
+    text = str(value or "").strip()
+    prefix = "injuryflags:"
+    return text[len(prefix):] if text.lower().startswith(prefix) else text
+
+
+def _athleteyearstatus_select_sql(select_clause):
+    injured_expr = (
+        "CAST(CASE WHEN LOWER(ISNULL([quality], '')) IN "
+        "('injured', 'verletzt', '1', 'true', 'yes', 'y') THEN 1 ELSE 0 END AS BIT) AS [injured]"
+    )
+    if str(select_clause).strip() == "*":
+        return f"[id], [first_name], [last_name], REPLACE([PisteYear], 'injuryflags:', '') AS [PisteYear], {injured_expr}"
+    return str(select_clause).replace("[PisteYear]", "REPLACE([PisteYear], 'injuryflags:', '') AS [PisteYear]").replace("injured", injured_expr)
+
+
+def _athleteyearstatus_filters(filters):
+    mapped = {k: v for k, v in filters.items() if k != "injured"}
+    if "PisteYear" in mapped:
+        mapped["PisteYear"] = _athleteyearstatus_year_key(mapped["PisteYear"])
+    mapped["toolenvironment"] = "injuryflags"
+    return mapped
+
+
+def _athleteyearstatus_payload(data):
+    injured_value = data.get("injured")
+    mapped = {k: v for k, v in data.items() if k != "injured"}
+    if "PisteYear" in mapped:
+        mapped["PisteYear"] = _athleteyearstatus_year_key(mapped["PisteYear"])
+    mapped["toolenvironment"] = "injuryflags"
+    mapped["quality"] = "injured" if str(injured_value).strip().lower() in ("1", "true", "yes", "y") else ""
+    return mapped
+
+
 def table_select(table, select="*", **filters):
     """Simple SELECT with optional equality filters."""
+    if _is_athleteyearstatus_table(table):
+        mapped_filters = _athleteyearstatus_filters(filters)
+        return table_select("socadditionalvalues", _athleteyearstatus_select_sql(select), **mapped_filters)
     where = ""
     params = []
     if filters:
@@ -470,6 +515,8 @@ def table_select(table, select="*", **filters):
 
 def table_insert(table, data: dict):
     """INSERT a single row. Auto-assigns integer id if not provided (skipped for UNIQUEIDENTIFIER tables)."""
+    if _is_athleteyearstatus_table(table):
+        return table_insert("socadditionalvalues", _athleteyearstatus_payload(data))
     if "id" not in data:
         try:
             rows = query(f"SELECT ISNULL(MAX(id), 0) AS max_id FROM [{table}]")
@@ -483,6 +530,8 @@ def table_insert(table, data: dict):
 
 def table_update(table, data: dict, **filters):
     """UPDATE rows matching filters."""
+    if _is_athleteyearstatus_table(table):
+        return table_update("socadditionalvalues", _athleteyearstatus_payload(data), **_athleteyearstatus_filters(filters))
     set_clause = ", ".join(f"[{k}] = %s" for k in data)
     where_clause = " AND ".join(f"[{k}] = %s" for k in filters)
     params = list(data.values()) + list(filters.values())
@@ -491,5 +540,7 @@ def table_update(table, data: dict, **filters):
 
 def table_delete(table, **filters):
     """DELETE rows matching filters."""
+    if _is_athleteyearstatus_table(table):
+        return table_delete("socadditionalvalues", **_athleteyearstatus_filters(filters))
     where_clause = " AND ".join(f"[{k}] = %s" for k in filters)
     execute(f"DELETE FROM [{table}] WHERE {where_clause}", list(filters.values()))

@@ -1006,7 +1006,7 @@ def edit_athletes():
                 for row in available_year_rows
                 if row.get("PisteYear") not in (None, "", "nan")
             },
-            key=lambda value: int(value) if str(value).isdigit() else str(value),
+            key=lambda value: (0, int(value)) if str(value).isdigit() else (1, str(value)),
         )
         if not year_options:
             year_options = [str(year) for year in range(2024, 2031)]
@@ -1181,29 +1181,25 @@ def manage_pisteresults_correction():
 
 
 def ensure_athleteyearstatus_table():
-    """Create a small lookup table for per-athlete, per-year injury flags if it does not exist yet."""
-    db.execute(
-        """
-        IF OBJECT_ID('dbo.athleteyearstatus', 'U') IS NULL
-        BEGIN
-            CREATE TABLE dbo.athleteyearstatus (
-                id INT NOT NULL PRIMARY KEY,
-                first_name NVARCHAR(100) NULL,
-                last_name NVARCHAR(100) NULL,
-                PisteYear NVARCHAR(10) NULL,
-                injured BIT NULL
-            );
-            CREATE INDEX IX_athleteyearstatus_yr_name
-                ON dbo.athleteyearstatus (PisteYear, last_name, first_name);
-        END
-        """
-    )
+    """Compatibility shim: injury flags are stored in socadditionalvalues special rows."""
+    return None
+
+def _injury_status_year_key(piste_year):
+    return f"injuryflags:{str(piste_year).strip()}"
+
+def _injury_status_year_from_key(piste_year):
+    value = str(piste_year or "").strip()
+    prefix = "injuryflags:"
+    return value[len(prefix):] if value.lower().startswith(prefix) else value
 
 
 def load_athleteyearstatus_map():
     try:
-        ensure_athleteyearstatus_table()
-        rows = fetch_all_rows("athleteyearstatus", select="first_name, last_name, PisteYear, injured")
+        rows = fetch_all_rows(
+            "socadditionalvalues",
+            select="first_name, last_name, PisteYear, quality",
+            toolenvironment="injuryflags",
+        )
     except Exception:
         return {}
 
@@ -1212,35 +1208,37 @@ def load_athleteyearstatus_map():
         key = (
             _norm_str(row.get("first_name")),
             _norm_str(row.get("last_name")),
-            _norm_str(row.get("PisteYear")),
+            _norm_str(_injury_status_year_from_key(row.get("PisteYear"))),
         )
-        status_map[key] = str(row.get("injured")).strip().lower() in ("1", "true", "yes", "y")
+        status_map[key] = _norm_str(row.get("quality")) in ("injured", "verletzt", "1", "true", "yes", "y")
     return status_map
 
 
 def save_athleteyearstatus(first_name, last_name, piste_year, injured):
-    ensure_athleteyearstatus_table()
+    year_key = _injury_status_year_key(piste_year)
     existing = db.table_select(
-        "athleteyearstatus",
+        "socadditionalvalues",
         "id",
         first_name=first_name,
         last_name=last_name,
-        PisteYear=str(piste_year),
+        PisteYear=year_key,
+        toolenvironment="injuryflags",
     )
     if injured:
         payload = {
+            "toolenvironment": "injuryflags",
             "first_name": first_name,
             "last_name": last_name,
-            "PisteYear": str(piste_year),
-            "injured": 1,
+            "PisteYear": year_key,
+            "quality": "injured",
         }
         if existing:
-            db.table_update("athleteyearstatus", payload, id=existing[0]["id"])
+            db.table_update("socadditionalvalues", payload, id=existing[0]["id"])
         else:
-            db.table_insert("athleteyearstatus", payload)
+            db.table_insert("socadditionalvalues", payload)
     else:
         if existing:
-            db.table_delete("athleteyearstatus", id=existing[0]["id"])
+            db.table_delete("socadditionalvalues", id=existing[0]["id"])
 
 
 def manage_scoretable():
@@ -4152,7 +4150,8 @@ def soc_full_calculation():
         # Cast on both sides avoids int/nvarchar coercion issues when legacy values like 'global' exist.
         db.execute(
             "DELETE FROM [socadditionalvalues] "
-            "WHERE CAST([PisteYear] AS NVARCHAR(10)) = CAST(%s AS NVARCHAR(10))",
+            "WHERE CAST([PisteYear] AS NVARCHAR(10)) = CAST(%s AS NVARCHAR(10)) "
+            "AND ISNULL([toolenvironment], '') <> 'injuryflags'",
             [pisteyear],
         )
 
@@ -4177,6 +4176,7 @@ def soc_full_calculation():
                 }
 
             athlete_data_map[key]["injured"] = "yes" if injured_map.get(key, False) else "no"
+            athlete_data_map[key]["injured"] = "yes" if injured_map.get((_norm_str(athlete['first_name']), _norm_str(athlete['last_name']), _norm_str(pisteyear)), False) else "no"
 
             bioage = athlete.get("bioage")
             bioage_map = {"q1": -1, "q2": -0.5, "q3": 0.5, "q4": 1}
@@ -4328,7 +4328,7 @@ def soc_full_calculation():
 
         # --- Alle berechneten Daten frisch einfügen ---
         for data in athlete_data_map.values():
-            db.table_insert("socadditionalvalues", data)
+            db.table_insert("socadditionalvalues", {k: v for k, v in data.items() if k != "injured"})
 
         # --- totalpoints berechnen und speichern ---
         fields = [
@@ -4449,6 +4449,8 @@ def show_full_piste_results_soc():
 
     # Daten laden
     soc_df = pd.DataFrame(fetch_all_rows("socadditionalvalues", select="*"))
+    if not soc_df.empty and "toolenvironment" in soc_df.columns:
+        soc_df = soc_df[soc_df["toolenvironment"].fillna("").astype(str).str.lower() != "injuryflags"].copy()
     if soc_df.empty:
         st.info("Keine Daten in socadditionalvalues gefunden.")
         return
