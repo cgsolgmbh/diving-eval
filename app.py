@@ -3275,7 +3275,6 @@ def piste_refpoint_wettkampf_analyse():
 
             colname = f"PisteRefPoints{selected_year}%"
             existing_percent = row.get(colname)
-            need_percent_update = existing_percent is None or existing_percent == ""
 
             discipline = row.get("Discipline")
             sex = row.get("sex")
@@ -3323,25 +3322,26 @@ def piste_refpoint_wettkampf_analyse():
                 continue
 
             ref_value = ref_row.iloc[0][str(age)]
-            if need_percent_update:
-                try:
-                    ref_value = float(ref_value)
-                    points_val = float(points)
-                    percent = round((points_val / ref_value) * 100, 1) if ref_value else None
-                except Exception:
-                    percent = None
-                    continue
-            else:
-                try:
-                    percent = float(existing_percent)
-                except Exception:
-                    percent = None
+            try:
+                ref_value = float(ref_value)
+                points_val = float(points)
+                percent = round((points_val / ref_value) * 100, 1) if ref_value else None
+            except Exception:
+                percent = None
+                continue
 
-            # Sammle Update für Batch — % nur neu schreiben wenn noch nicht vorhanden
+            # Sammle Update für Batch — % bei Änderungen immer neu schreiben
             update_entry = {"id": row["id"]}
-            if need_percent_update and percent is not None:
-                update_entry[colname] = percent
-                updated += 1
+            if percent is not None:
+                changed = False
+                try:
+                    old_percent = float(existing_percent) if existing_percent not in (None, "", "nan") else None
+                    changed = old_percent is None or abs(old_percent - percent) >= 0.05
+                except Exception:
+                    changed = True
+                if changed:
+                    update_entry[colname] = percent
+                    updated += 1
             updates.append(update_entry)
 
             # --- RegionalTeam ---
