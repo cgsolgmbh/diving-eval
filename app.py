@@ -388,6 +388,9 @@ def startseite():
         if st.button("Full PISTE Results SOC"):
             st.session_state["page"] = "Full PISTE Results SOC"
             st.rerun()
+        if st.button("Kaderzugehörigkeiten"):
+            st.session_state["page"] = "Kaderzugehörigkeiten"
+            st.rerun()
 
     st.header("🏆 Wettkampf")
     col1, col2, col3, col4 = st.columns(4)
@@ -4572,6 +4575,127 @@ def show_full_piste_results_soc():
                          xytext=(0, 3), textcoords="offset points", ha="center", va="bottom")
         st.pyplot(fig2)
 
+
+def show_kaderzugehoerigkeiten():
+    st.header("🎯 Kaderzugehörigkeiten")
+
+    soc_df = pd.DataFrame(fetch_all_rows("socadditionalvalues", select="*"))
+    if not soc_df.empty and "toolenvironment" in soc_df.columns:
+        soc_df = soc_df[soc_df["toolenvironment"].fillna("").astype(str).str.lower() != "injuryflags"].copy()
+
+    comp_df = pd.DataFrame(fetch_all_rows("compresults", select="*"))
+    competitions_df = pd.DataFrame(fetch_all_rows("competitions", select="Name, PisteYear, qual-JEM, qual-EM, qual-WM"))
+
+    if soc_df.empty and comp_df.empty:
+        st.info("Keine Daten für Kaderzugehörigkeiten gefunden.")
+        return
+
+    def _yes(v):
+        return str(v or "").strip().lower() == "yes"
+
+    available_years = set()
+    if not soc_df.empty and "PisteYear" in soc_df.columns:
+        available_years.update(str(v).strip() for v in soc_df["PisteYear"].dropna().tolist() if str(v).strip())
+    if not competitions_df.empty and "PisteYear" in competitions_df.columns:
+        available_years.update(str(v).strip() for v in competitions_df["PisteYear"].dropna().tolist() if str(v).strip())
+
+    years = sorted(available_years, reverse=True)
+    if not years:
+        st.info("Keine Jahre (PisteYear) verfügbar.")
+        return
+
+    current_year = str(datetime.datetime.now().year)
+    default_idx = years.index(current_year) if current_year in years else 0
+    selected_year = st.selectbox("Jahr", years, index=default_idx, key="kaderzugehoerigkeit_year")
+
+    # Jugendkader stammt aus SOC (Piste-basiert).
+    nat_youth = pd.DataFrame(columns=["first_name", "last_name", "sex", "Category", "PisteYear"])
+    reg_youth = pd.DataFrame(columns=["first_name", "last_name", "sex", "Category", "PisteYear"])
+    if not soc_df.empty:
+        for col in ["first_name", "last_name", "sex", "Category", "PisteYear", "talentcard"]:
+            if col not in soc_df.columns:
+                soc_df[col] = None
+
+        soc_year = soc_df[soc_df["PisteYear"].astype(str).str.strip() == str(selected_year).strip()].copy()
+        soc_year = soc_year[soc_year["Category"].astype(str).str.strip().str.lower() != "elite"]
+        soc_year = soc_year[soc_year["talentcard"].notna()]
+
+        nat_youth = soc_year[soc_year["talentcard"].astype(str).str.strip().str.lower() == "national"][
+            ["first_name", "last_name", "sex", "Category", "PisteYear"]
+        ].drop_duplicates().sort_values(["last_name", "first_name"]).reset_index(drop=True)
+
+        reg_youth = soc_year[soc_year["talentcard"].astype(str).str.strip().str.lower() == "regional"][
+            ["first_name", "last_name", "sex", "Category", "PisteYear"]
+        ].drop_duplicates().sort_values(["last_name", "first_name"]).reset_index(drop=True)
+
+    # Elite: nur Wettkampfresultate und nur Wettkämpfe mit Nationalteam-Relevanz.
+    nat_elite = pd.DataFrame(columns=["first_name", "last_name", "sex", "CategoryStart", "Competition", "Discipline", "Points", "PisteYear"])
+    if not comp_df.empty:
+        for col in ["first_name", "last_name", "sex", "CategoryStart", "Competition", "Discipline", "Points", "NationalTeam"]:
+            if col not in comp_df.columns:
+                comp_df[col] = None
+
+        comp_name_key = competitions_df.copy()
+        if not comp_name_key.empty:
+            comp_name_key["_name_key"] = comp_name_key["Name"].astype(str).str.strip().str.lower()
+            comp_name_key = comp_name_key.drop_duplicates(subset=["_name_key"], keep="first")
+
+            comp_df["_name_key"] = comp_df["Competition"].astype(str).str.strip().str.lower()
+            comp_merge_cols = comp_name_key[["_name_key", "PisteYear", "qual-JEM", "qual-EM", "qual-WM"]].rename(
+                columns={"PisteYear": "_comp_pisteyear"}
+            )
+            comp_df = comp_df.merge(
+                comp_merge_cols,
+                on="_name_key",
+                how="left",
+            )
+
+        comp_df["_year_resolved"] = comp_df.get("_comp_pisteyear")
+        if "PisteYear" in comp_df.columns:
+            comp_df["_year_resolved"] = comp_df["_year_resolved"].fillna(comp_df["PisteYear"])
+
+        comp_df["_nt_relevant_comp"] = (
+            comp_df.apply(lambda r: _yes(r.get("qual-JEM")) or _yes(r.get("qual-EM")) or _yes(r.get("qual-WM")), axis=1)
+        )
+
+        nat_elite = comp_df[
+            (comp_df["CategoryStart"].astype(str).str.strip().str.lower() == "elite")
+            & (comp_df["NationalTeam"].astype(str).str.strip().str.lower() == "yes")
+            & (comp_df["_nt_relevant_comp"])
+            & (comp_df["_year_resolved"].astype(str).str.strip() == str(selected_year).strip())
+        ][["first_name", "last_name", "sex", "CategoryStart", "Competition", "Discipline", "Points", "PisteYear"]]
+
+        nat_elite = nat_elite.drop_duplicates().sort_values(["last_name", "first_name", "Competition", "Discipline"]).reset_index(drop=True)
+
+    st.caption("Jugend-Kader werden aus SOC (Piste) gelesen. Elite-Nationalkader werden aus Wettkampfresultaten gelesen und nur für Nationalteam-relevante Wettkämpfe berücksichtigt.")
+
+    st.subheader(f"Nationalkader Elite ({len(nat_elite)})")
+    st.dataframe(nat_elite)
+    st.download_button(
+        "📥 Nationalkader Elite als CSV",
+        nat_elite.to_csv(index=False, encoding="utf-8-sig"),
+        file_name=f"kader_national_elite_{selected_year}.csv",
+        mime="text/csv",
+    )
+
+    st.subheader(f"Nationalkader Jugend ({len(nat_youth)})")
+    st.dataframe(nat_youth)
+    st.download_button(
+        "📥 Nationalkader Jugend als CSV",
+        nat_youth.to_csv(index=False, encoding="utf-8-sig"),
+        file_name=f"kader_national_jugend_{selected_year}.csv",
+        mime="text/csv",
+    )
+
+    st.subheader(f"Regionalkader Jugend ({len(reg_youth)})")
+    st.dataframe(reg_youth)
+    st.download_button(
+        "📥 Regionalkader Jugend als CSV",
+        reg_youth.to_csv(index=False, encoding="utf-8-sig"),
+        file_name=f"kader_regional_jugend_{selected_year}.csv",
+        mime="text/csv",
+    )
+
 def vergleich_big_competitions():
     st.header("🏆 Vergleich Big Competitions")
 
@@ -5595,6 +5719,7 @@ def main():
         "Trainingsperformance - Resilienz",
         "SOC Full Calculation",
         "Full PISTE Results SOC",
+        "Kaderzugehörigkeiten",
         "Full PISTE Results for Clubs",
         "Selektionen Wettkämpfe",
         "Vergleich BIG Competitions",
@@ -5652,6 +5777,8 @@ def main():
         soc_full_calculation()
     elif selected == "Full PISTE Results SOC":
         show_full_piste_results_soc()
+    elif selected == "Kaderzugehörigkeiten":
+        show_kaderzugehoerigkeiten()
     elif selected == "Full PISTE Results for Clubs":
         show_full_piste_results_clubs()
     elif selected == "Selektionen Wettkämpfe":
