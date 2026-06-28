@@ -4495,7 +4495,7 @@ def show_full_piste_results_soc():
     categories = sorted(soc_df["Category"].dropna().unique())
     category = st.multiselect("Kategorie", categories, default=categories)
     talentcard_values = ["Alle", "Verletzt"] + sorted([v for v in soc_df["talentcard"].dropna().unique() if v != ""])
-    talentcard_filter = st.selectbox("Talentcard", list(dict.fromkeys(talentcard_values)))
+    talentcard_filter = st.selectbox("Talentcard", list(dict.fromkeys(talentcard_values)), key="talentcard_filter_v2")
 
     # Anwenden der Filter
     filtered = soc_df[
@@ -4553,9 +4553,9 @@ def show_full_piste_results_soc():
 
     # --- Grafik für Talentcard-Verteilung ---
     if not filtered.empty and "talentcard" in filtered.columns:
-        card_counts = filtered["talentcard"].value_counts().reindex(["National", "Regional", "noCard"], fill_value=0)
+        card_counts = filtered["talentcard"].value_counts().reindex(["Verletzt", "National", "Regional", "noCard"], fill_value=0)
         fig2, ax2 = plt.subplots(figsize=(5, 3))
-        bars = ax2.bar(card_counts.index, card_counts.values, color=["#1f77b4", "#2ca02c", "#d62728"])
+        bars = ax2.bar(card_counts.index, card_counts.values, color=["#9467bd", "#1f77b4", "#2ca02c", "#d62728"])
         ax2.set_ylabel("Anzahl Athleten")
         ax2.set_title("Verteilung Talentcard")
         for bar in bars:
