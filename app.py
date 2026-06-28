@@ -995,6 +995,37 @@ def edit_athletes():
                 'category': category
             }, id=athlete_id)
             st.success("Athletendaten aktualisiert.")
+
+        st.markdown("---")
+        st.subheader("🩹 Verletzungsstatus pro Jahr")
+        injury_map = load_athleteyearstatus_map()
+        available_year_rows = fetch_all_rows("socadditionalvalues", select="PisteYear")
+        year_options = sorted(
+            {
+                str(row.get("PisteYear")).strip()
+                for row in available_year_rows
+                if row.get("PisteYear") not in (None, "", "nan")
+            },
+            key=lambda value: int(value) if str(value).isdigit() else str(value),
+        )
+        if not year_options:
+            year_options = [str(year) for year in range(2024, 2031)]
+
+        selected_year = st.selectbox("Jahr", year_options, key=f"injury_year_{athlete_id}")
+        injury_key = (first_name.lower().strip(), last_name.lower().strip(), str(selected_year))
+        injured_default = injury_map.get(injury_key, False)
+        injured_now = st.checkbox("Verletzt", value=injured_default, key=f"injury_flag_{athlete_id}")
+        if st.button("Verletzungsstatus speichern", key=f"save_injury_{athlete_id}"):
+            save_athleteyearstatus(first_name, last_name, selected_year, injured_now)
+            st.success(f"Verletzungsstatus für {selected_year} gespeichert.")
+
+        athlete_status_rows = []
+        for year in year_options:
+            athlete_status_rows.append({
+                "PisteYear": year,
+                "injured": "yes" if injury_map.get((first_name.lower().strip(), last_name.lower().strip(), str(year)), False) else "no",
+            })
+        st.dataframe(pd.DataFrame(athlete_status_rows), use_container_width=True)
     else:
         st.info("Bitte zuerst einen Athleten auswählen.")
 
@@ -1147,124 +1178,69 @@ def manage_pisteresults_correction():
             if str(a).strip() and str(a).strip().lower() != "nan"
         }
     )
-    selected_athlete = st.selectbox("Athlet", [""] + athletes_in_year, index=0)
-    if not selected_athlete:
-        st.info("Bitte zuerst einen Athleten auswählen.")
-        return
 
-    df_ath = df_year[df_year["athlete_label"] == selected_athlete].copy()
-    if df_ath.empty:
-        st.info("Keine Einträge für den gewählten Athleten gefunden.")
-        return
 
-    disciplines_in_athlete = sorted(
-        {
-            str(d).strip()
-            for d in df_ath["discipline_name"].dropna().tolist()
-            if str(d).strip() and str(d).strip().lower() != "nan"
+def ensure_athleteyearstatus_table():
+    """Create a small lookup table for per-athlete, per-year injury flags if it does not exist yet."""
+    db.execute(
+        """
+        IF OBJECT_ID('dbo.athleteyearstatus', 'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.athleteyearstatus (
+                id INT NOT NULL PRIMARY KEY,
+                first_name NVARCHAR(100) NULL,
+                last_name NVARCHAR(100) NULL,
+                PisteYear NVARCHAR(10) NULL,
+                injured BIT NULL
+            );
+            CREATE INDEX IX_athleteyearstatus_yr_name
+                ON dbo.athleteyearstatus (PisteYear, last_name, first_name);
+        END
+        """
+    )
+
+
+def load_athleteyearstatus_map():
+    try:
+        ensure_athleteyearstatus_table()
+        rows = fetch_all_rows("athleteyearstatus", select="first_name, last_name, PisteYear, injured")
+    except Exception:
+        return {}
+
+    status_map = {}
+    for row in rows or []:
+        key = (
+            _norm_str(row.get("first_name")),
+            _norm_str(row.get("last_name")),
+            _norm_str(row.get("PisteYear")),
+        )
+        status_map[key] = str(row.get("injured")).strip().lower() in ("1", "true", "yes", "y")
+    return status_map
+
+
+def save_athleteyearstatus(first_name, last_name, piste_year, injured):
+    ensure_athleteyearstatus_table()
+    existing = db.table_select(
+        "athleteyearstatus",
+        "id",
+        first_name=first_name,
+        last_name=last_name,
+        PisteYear=str(piste_year),
+    )
+    if injured:
+        payload = {
+            "first_name": first_name,
+            "last_name": last_name,
+            "PisteYear": str(piste_year),
+            "injured": 1,
         }
-    )
-    selected_discipline = st.selectbox("Disziplin", [""] + disciplines_in_athlete, index=0)
-    if not selected_discipline:
-        st.info("Bitte zuerst eine Disziplin auswählen.")
-    else:
-        df_target = df_ath[df_ath["discipline_name"] == selected_discipline].copy()
-        if df_target.empty:
-            st.info("Kein passender Eintrag gefunden.")
+        if existing:
+            db.table_update("athleteyearstatus", payload, id=existing[0]["id"])
         else:
-            if len(df_target) > 1:
-                row_options = [
-                    f"id={row.get('id')} | raw={row.get('raw_result')} | points={row.get('points')}"
-                    for _, row in df_target.iterrows()
-                ]
-                selected_row = st.selectbox("Eintrag", row_options)
-                selected_id = int(str(selected_row).split("|")[0].replace("id=", "").strip())
-                current = df_target[df_target["id"] == selected_id].iloc[0]
-            else:
-                current = df_target.iloc[0]
-
-            athlete_id = current.get("athlete_id")
-            athlete_data = athlete_by_id.get(athlete_id, {})
-            sex = athlete_data.get("sex") or current.get("sex")
-            vintage = athlete_data.get("vintage")
-            category = get_category_from_testyear(vintage, selected_year) if vintage else current.get("category")
-
-            st.caption(
-                f"Aktuell: raw_result={current.get('raw_result')}, points={current.get('points')}, category={current.get('category')}, sex={current.get('sex')}"
-            )
-
-            all_disciplines = sorted(set([d.get("name") for d in disciplines if d.get("name")]))
-            current_discipline_name = str(current.get("discipline_name") or "")
-            if current_discipline_name and current_discipline_name not in all_disciplines:
-                all_disciplines.append(current_discipline_name)
-                all_disciplines = sorted(all_disciplines)
-
-            new_discipline_name = st.selectbox(
-                "Neue Disziplin",
-                all_disciplines,
-                index=all_disciplines.index(current_discipline_name) if current_discipline_name in all_disciplines else 0,
-            )
-            new_raw_result = st.text_input("Neuer raw_result", value=str(current.get("raw_result") or ""))
-
-            discipline_id_map = {d.get("name"): d.get("id") for d in disciplines if d.get("name") and d.get("id")}
-
-            if st.button("💾 Speichern"):
-                if not new_raw_result or not str(new_raw_result).strip():
-                    st.error("Bitte einen gültigen raw_result eingeben.")
-                    return
-
-                new_discipline_id = discipline_id_map.get(new_discipline_name)
-                if not new_discipline_id:
-                    st.error("Die gewählte Disziplin konnte nicht zugeordnet werden.")
-                    return
-
-                raw_str = str(new_raw_result).strip()
-                if raw_str == "9999":
-                    raw_to_store = 9999
-                    points = 0
-                else:
-                    try:
-                        raw_to_store = float(raw_str)
-                    except Exception:
-                        st.error("raw_result muss numerisch sein (oder 9999).")
-                        return
-
-                    excluded_ids = {
-                        "640260ec-a094-462d-a69e-d91bbe35d94c",
-                        "5906836a-24aa-40e1-a71f-614a7ea4a825",
-                        "7eb062f7-3329-4cde-8875-bd6fd362137b",
-                    }
-                    if new_discipline_id in excluded_ids:
-                        points = 0
-                    else:
-                        points = get_points(new_discipline_id, raw_to_store, category, sex)
-
-                db.table_update(
-                    "pisteresults",
-                    {
-                        "discipline_id": new_discipline_id,
-                        "raw_result": raw_to_store,
-                        "points": points,
-                        "category": category,
-                        "sex": sex,
-                    },
-                    id=current.get("id"),
-                )
-                st.success("Eintrag aktualisiert.")
-                st.rerun()
-
-            if st.button("🗑️ Eintrag löschen"):
-                db.table_delete("pisteresults", id=current.get("id"))
-                st.warning("Eintrag gelöscht.")
-                st.rerun()
-
-    st.markdown("---")
-    st.subheader("Treffer für Jahr/Athlet")
-    st.dataframe(
-        df_ath[["id", "discipline_name", "raw_result", "points", "category", "sex", "TestYear"]]
-        .sort_values(by=["discipline_name", "id"], ascending=[True, True])
-        .reset_index(drop=True)
-    )
+            db.table_insert("athleteyearstatus", payload)
+    else:
+        if existing:
+            db.table_delete("athleteyearstatus", id=existing[0]["id"])
 
 
 def manage_scoretable():
@@ -4148,6 +4124,7 @@ def soc_full_calculation():
     if st.button("SOC Full Calculation starten"):
         pisteyear = str(selected_year)
         pisteyear_int = int(selected_year)
+        injured_map = load_athleteyearstatus_map()
 
         athletes = db.table_select('athletes', 'id, first_name, last_name, birthdate, sex, vintage, bioage')
         athletes_lookup = {(a['first_name'].strip().lower(), a['last_name'].strip().lower()): a for a in athletes}
@@ -4198,6 +4175,8 @@ def soc_full_calculation():
                     "PisteYear": pisteyear,
                     "Category": get_category_from_agecategories(athlete.get('vintage'), pisteyear_int, agecategories)
                 }
+
+            athlete_data_map[key]["injured"] = "yes" if injured_map.get(key, False) else "no"
 
             bioage = athlete.get("bioage")
             bioage_map = {"q1": -1, "q2": -0.5, "q3": 0.5, "q4": 1}
@@ -4332,7 +4311,7 @@ def soc_full_calculation():
                 and r.get('Competition') in comp_names
                 and str(r.get('NationalTeam') or '').lower() == 'yes'
             ]
-            athlete_data_map[key]["CompPointsNationalTeam"] = "yes" if relevant_results else "no"
+            athlete_data_map[key]["CompPointsNationalTeam"] = "no" if athlete_data_map[key].get("injured") == "yes" else ("yes" if relevant_results else "no")
 
         compresults_regio = fetch_all_rows('compresults', select='first_name, last_name, Competition, RegionalTeam')
         for key in athlete_data_map:
@@ -4345,7 +4324,7 @@ def soc_full_calculation():
                 and r.get('Competition') in comp_names
                 and str(r.get('RegionalTeam') or '').strip().lower() == 'yes'
             ]
-            athlete_data_map[key]["CompPointsRegionalTeam"] = "yes" if relevant_results_regio else "no"
+            athlete_data_map[key]["CompPointsRegionalTeam"] = "no" if athlete_data_map[key].get("injured") == "yes" else ("yes" if relevant_results_regio else "no")
 
         # --- Alle berechneten Daten frisch einfügen ---
         for data in athlete_data_map.values():
@@ -4435,7 +4414,16 @@ def soc_full_calculation():
             comp_points_nt = str(row[0].get("CompPointsNationalTeam", "")).lower()
             comp_points_regio = str(row[0].get("CompPointsRegionalTeam", "")).lower()
 
-            if pisteminnational == "yes" and comp_points_nt == "yes":
+            if athlete_data_map[key].get("injured") == "yes":
+                talentcard = "noCard"
+                db.table_update(
+                    "socadditionalvalues",
+                    {"CompPointsNationalTeam": "no", "CompPointsRegionalTeam": "no"},
+                    first_name=data['first_name'],
+                    last_name=data['last_name'],
+                    PisteYear=data['PisteYear']
+                )
+            elif pisteminnational == "yes" and comp_points_nt == "yes":
                 talentcard = "National"
                 db.table_update(
                     "socadditionalvalues",
@@ -4465,6 +4453,8 @@ def show_full_piste_results_soc():
         st.info("Keine Daten in socadditionalvalues gefunden.")
         return
 
+    injury_map = load_athleteyearstatus_map()
+
     # Nur gewünschte Spalten anzeigen (inkl. CompPointsNationalTeam und talentcard)
     show_cols = [
         "first_name", "last_name", "Category", "sex", "PisteYear",
@@ -4477,6 +4467,16 @@ def show_full_piste_results_soc():
         if col not in soc_df.columns:
             soc_df[col] = None
     soc_df = soc_df[show_cols]
+    soc_df["injured"] = soc_df.apply(
+        lambda row: "yes"
+        if injury_map.get((
+            str(row.get("first_name") or "").strip().lower(),
+            str(row.get("last_name") or "").strip().lower(),
+            str(row.get("PisteYear") or "").strip(),
+        ), False)
+        else "no",
+        axis=1,
+    )
 
     # Filter
     st.subheader("🔎 Filter")

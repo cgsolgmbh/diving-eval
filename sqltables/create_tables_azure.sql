@@ -36,6 +36,7 @@ IF OBJECT_ID('dbo.pistereftrainingtime','U')  IS NOT NULL DROP TABLE dbo.pistere
 IF OBJECT_ID('dbo.pisteenvironment','U')      IS NOT NULL DROP TABLE dbo.pisteenvironment;
 IF OBJECT_ID('dbo.pistemirwald','U')          IS NOT NULL DROP TABLE dbo.pistemirwald;
 IF OBJECT_ID('dbo.selectionpoints','U')       IS NOT NULL DROP TABLE dbo.selectionpoints;
+IF OBJECT_ID('dbo.athleteyearstatus','U')     IS NOT NULL DROP TABLE dbo.athleteyearstatus;
 IF OBJECT_ID('dbo.socadditionalvalues','U')   IS NOT NULL DROP TABLE dbo.socadditionalvalues;
 IF OBJECT_ID('dbo.team','U')                  IS NOT NULL DROP TABLE dbo.team;
 IF OBJECT_ID('dbo.trainingsperformance','U')  IS NOT NULL DROP TABLE dbo.trainingsperformance;
@@ -420,6 +421,16 @@ CREATE TABLE dbo.socadditionalvalues (
 );
 GO
 
+-- Per-athlete, per-year injury flag used by SOC calculation and display
+CREATE TABLE dbo.athleteyearstatus (
+    id          INT           NOT NULL PRIMARY KEY,
+    first_name  NVARCHAR(100) NULL,
+    last_name   NVARCHAR(100) NULL,
+    PisteYear   NVARCHAR(10)  NULL,
+    injured     BIT           NULL
+);
+GO
+
 -- ============================================================
 -- Indexes for common query patterns
 -- ============================================================
@@ -429,4 +440,5 @@ CREATE INDEX IX_athletes_category  ON dbo.athletes (category, sex);
 CREATE INDEX IX_pisteresults_yr    ON dbo.pisteresults (TestYear, athlete_id);
 CREATE INDEX IX_compresults_name   ON dbo.compresults (last_name, first_name, Discipline);
 CREATE INDEX IX_socadditional_yr   ON dbo.socadditionalvalues (PisteYear, last_name, first_name);
+CREATE INDEX IX_athleteyearstatus_yr_name ON dbo.athleteyearstatus (PisteYear, last_name, first_name);
 GO
