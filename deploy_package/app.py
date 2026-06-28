@@ -4295,6 +4295,8 @@ def show_full_piste_results_soc():
         st.info("Keine Daten in socadditionalvalues gefunden.")
         return
 
+    injury_map = load_athleteyearstatus_map()
+
     # Nur gewünschte Spalten anzeigen (inkl. CompPointsNationalTeam und talentcard)
     show_cols = [
         "first_name", "last_name", "Category", "sex", "PisteYear",
@@ -4307,6 +4309,16 @@ def show_full_piste_results_soc():
         if col not in soc_df.columns:
             soc_df[col] = None
     soc_df = soc_df[show_cols]
+    soc_df["injured"] = soc_df.apply(
+        lambda row: "yes"
+        if injury_map.get((
+            str(row.get("first_name") or "").strip().lower(),
+            str(row.get("last_name") or "").strip().lower(),
+            str(row.get("PisteYear") or "").strip(),
+        ), False)
+        else "no",
+        axis=1,
+    )
 
     # Filter
     st.subheader("🔎 Filter")
@@ -4321,8 +4333,8 @@ def show_full_piste_results_soc():
     sex = st.selectbox("Geschlecht", ["Alle"] + sexes)
     categories = sorted(soc_df["Category"].dropna().unique())
     category = st.multiselect("Kategorie", categories, default=categories)
-    talentcard_values = ["Alle"] + sorted([v for v in soc_df["talentcard"].dropna().unique() if v != ""])
-    talentcard_filter = st.selectbox("Talentcard", talentcard_values)
+    talentcard_values = ["Alle", "Verletzt"] + sorted([v for v in soc_df["talentcard"].dropna().unique() if v != ""])
+    talentcard_filter = st.selectbox("Talentcard", list(dict.fromkeys(talentcard_values)))
 
     # Anwenden der Filter
     filtered = soc_df[
@@ -4331,7 +4343,11 @@ def show_full_piste_results_soc():
         (soc_df["last_name"].str.lower().str.strip() == last_name.lower().strip() if last_name != "Alle" else True) &
         soc_df["Category"].astype(str).isin([str(c) for c in category]) &
         (soc_df["sex"].astype(str) == str(sex) if sex != "Alle" else True) &
-        (soc_df["talentcard"] == talentcard_filter if talentcard_filter != "Alle" else True)
+        (
+            soc_df["injured"] == "yes"
+            if talentcard_filter == "Verletzt"
+            else (soc_df["talentcard"] == talentcard_filter if talentcard_filter != "Alle" else True)
+        )
     ]
 
     st.dataframe(filtered)

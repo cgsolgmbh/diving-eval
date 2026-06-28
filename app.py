@@ -4493,8 +4493,8 @@ def show_full_piste_results_soc():
     sex = st.selectbox("Geschlecht", ["Alle"] + sexes)
     categories = sorted(soc_df["Category"].dropna().unique())
     category = st.multiselect("Kategorie", categories, default=categories)
-    talentcard_values = ["Alle"] + sorted([v for v in soc_df["talentcard"].dropna().unique() if v != ""])
-    talentcard_filter = st.selectbox("Talentcard", talentcard_values)
+    talentcard_values = ["Alle", "Verletzt"] + sorted([v for v in soc_df["talentcard"].dropna().unique() if v != ""])
+    talentcard_filter = st.selectbox("Talentcard", list(dict.fromkeys(talentcard_values)))
 
     # Anwenden der Filter
     filtered = soc_df[
@@ -4503,7 +4503,11 @@ def show_full_piste_results_soc():
         (soc_df["last_name"].str.lower().str.strip() == last_name.lower().strip() if last_name != "Alle" else True) &
         soc_df["Category"].astype(str).isin([str(c) for c in category]) &
         (soc_df["sex"].astype(str) == str(sex) if sex != "Alle" else True) &
-        (soc_df["talentcard"] == talentcard_filter if talentcard_filter != "Alle" else True)
+        (
+            soc_df["injured"] == "yes"
+            if talentcard_filter == "Verletzt"
+            else (soc_df["talentcard"] == talentcard_filter if talentcard_filter != "Alle" else True)
+        )
     ]
 
     st.dataframe(filtered)
