@@ -38,6 +38,7 @@ def get_app_version():
     except Exception:
         return "local-unknown"
 
+
 # Auth handled by login_view()
 # --- Caching für selten geänderte Tabellen ---
 @st.cache_data
@@ -4484,7 +4485,10 @@ def show_full_piste_results_soc():
     # Filter
     st.subheader("🔎 Filter")
     years = sorted(soc_df["PisteYear"].dropna().unique())
-    year = st.multiselect("Jahr", years, default=years)
+    current_year = datetime.datetime.now().year
+    year_default_index = next((index for index, value in enumerate(years) if str(value) == str(current_year)), 0)
+    selected_year = st.selectbox("Jahr", years, index=year_default_index, key=f"soc_year_filter_{get_app_version()}")
+    year = [selected_year]
 
     last_names = sorted(soc_df["last_name"].dropna().unique())
     last_name = st.selectbox("Nachname", ["Alle"] + last_names)
@@ -4553,7 +4557,11 @@ def show_full_piste_results_soc():
 
     # --- Grafik für Talentcard-Verteilung ---
     if not filtered.empty and "talentcard" in filtered.columns:
-        card_counts = filtered["talentcard"].value_counts().reindex(["Verletzt", "National", "Regional", "noCard"], fill_value=0)
+        chart_labels = filtered.apply(
+            lambda row: "Verletzt" if str(row.get("injured", "")).strip().lower() == "yes" else row.get("talentcard"),
+            axis=1,
+        )
+        card_counts = chart_labels.value_counts().reindex(["Verletzt", "National", "Regional", "noCard"], fill_value=0)
         fig2, ax2 = plt.subplots(figsize=(5, 3))
         bars = ax2.bar(card_counts.index, card_counts.values, color=["#9467bd", "#1f77b4", "#2ca02c", "#d62728"])
         ax2.set_ylabel("Anzahl Athleten")

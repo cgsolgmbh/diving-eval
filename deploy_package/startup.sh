@@ -102,5 +102,7 @@ exec "$PYTHON_BIN" -m streamlit run "$APP_PY" \
     --server.port 8000 \
     --server.address 0.0.0.0 \
     --server.headless true \
+    --server.maxWebsocketConnections 1000 \
+    --server.disconnectedSessionTTL 30 \
     --server.enableCORS false \
     --server.enableXsrfProtection false

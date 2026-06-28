@@ -16,7 +16,7 @@ $files = @(
     @{ Source = 'C:\Users\ChristianGreuter\OneDrive - Greuter\Dokumente\GitHub\diving-eval-v2\app.py'; Target = 'app.py' }
 )
 
-$version = (git -C 'C:\Users\ChristianGreuter\OneDrive - Greuter\Dokumente\GitHub\diving-eval-v2' rev-parse --short HEAD).Trim() + '-direct-vfs2'
+$version = '46c8288-wsfix1'
 Set-Content -Path 'C:\Users\ChristianGreuter\OneDrive - Greuter\Dokumente\GitHub\diving-eval-v2\app_version.txt' -Value $version -Encoding UTF8
 $files += @{ Source = 'C:\Users\ChristianGreuter\OneDrive - Greuter\Dokumente\GitHub\diving-eval-v2\app_version.txt'; Target = 'app_version.txt' }
 Set-Content -Path 'C:\Users\ChristianGreuter\OneDrive - Greuter\Dokumente\GitHub\diving-eval-v2\.app_version' -Value $version -Encoding UTF8
